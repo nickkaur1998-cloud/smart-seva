@@ -1179,54 +1179,54 @@ def layout(content, title="Smart Seva"):
             ੴ • Seva • Sangat • Chardi Kala
         </footer>
         <script>
-        async function translatePageToPunjabi() {
+        async function translatePageToPunjabi() {{
             const button = document.querySelector(".translate-button");
-            if (button) {
+            if (button) {{
                 button.disabled = true;
                 button.textContent = "ਪੰਜਾਬੀ…";
-            }
+            }}
 
             const nodes = [];
-            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-                acceptNode(node) {
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {{
+                acceptNode(node) {{
                     const parent = node.parentElement;
                     if (!parent) return NodeFilter.FILTER_REJECT;
-                    if (parent.closest("script, style, noscript, textarea, input, select, option, button")) {
+                    if (parent.closest("script, style, noscript, textarea, input, select, option, button")) {{
                         return NodeFilter.FILTER_REJECT;
-                    }
+                    }}
                     if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
                     return NodeFilter.FILTER_ACCEPT;
-                }
-            });
+                }}
+            }});
 
             let node;
             while ((node = walker.nextNode())) nodes.push(node);
             const texts = nodes.map(n => n.nodeValue);
 
-            try {
-                const response = await fetch("/api/translate", {
+            try {{
+                const response = await fetch("/api/translate", {{
                     method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({texts: texts, target: "pa"})
-                });
+                    headers: {{"Content-Type": "application/json"}},
+                    body: JSON.stringify({{texts: texts, target: "pa"}})
+                }});
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || "Translation failed.");
 
-                if (Array.isArray(data.translations)) {
-                    nodes.forEach((n, i) => {
+                if (Array.isArray(data.translations)) {{
+                    nodes.forEach((n, i) => {{
                         if (data.translations[i]) n.nodeValue = data.translations[i];
-                    });
-                }
-            } catch (error) {
+                    }});
+                }}
+            }} catch (error) {{
                 console.error(error);
                 alert("Punjabi translation is temporarily unavailable.");
-            } finally {
-                if (button) {
+            }} finally {{
+                if (button) {{
                     button.disabled = false;
                     button.textContent = "ਪੰਜਾਬੀ";
-                }
-            }
-        }
+                }}
+            }}
+        }}
         </script>
 
     </body>
