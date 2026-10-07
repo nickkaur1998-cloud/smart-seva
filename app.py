@@ -1150,9 +1150,39 @@ def layout(content, title="Smart Seva"):
             ੴ • Seva • Sangat • Chardi Kala
         </footer>
         <script>
-        function googleTranslateElementInit(){new google.translate.TranslateElement({pageLanguage:"en",includedLanguages:"pa",autoDisplay:false,layout:google.translate.TranslateElement.InlineLayout.SIMPLE},"google_translate_element");}
-        function translatePageToPunjabi(){const select=document.querySelector(".goog-te-combo");if(select){select.value="pa";select.dispatchEvent(new Event("change"));}else{setTimeout(translatePageToPunjabi,300);}}
-        </script>
+        function googleTranslateElementInit(){
+            new google.translate.TranslateElement(
+                {pageLanguage:"en",includedLanguages:"pa",autoDisplay:false},
+                "google_translate_element"
+            );
+        }
+
+        function fireTranslateChange(element){
+            if(!element) return;
+            try{
+                element.dispatchEvent(new Event("change",{bubbles:true}));
+            }catch(e){
+                var event=document.createEvent("HTMLEvents");
+                event.initEvent("change",true,true);
+                element.dispatchEvent(event);
+            }
+        }
+
+        function translatePageToPunjabi(){
+            var select=document.querySelector(".goog-te-combo");
+            if(select){
+                select.value="pa";
+                fireTranslateChange(select);
+                return;
+            }
+            setTimeout(function(){
+                var retry=document.querySelector(".goog-te-combo");
+                if(retry){
+                    retry.value="pa";
+                    fireTranslateChange(retry);
+                }
+            },500);
+        }</script>
         <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
 
     </body>
