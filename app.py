@@ -1047,6 +1047,7 @@ footer {
 
 }
 
+.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end}.filter-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.filter-summary{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.filter-chip{padding:7px 11px;border:1px solid rgba(215,168,62,.25);border-radius:999px;background:rgba(255,255,255,.05);font-size:12px}.capacity-bar{height:8px;border-radius:20px;background:rgba(255,255,255,.1);overflow:hidden;margin:7px 0 10px}.capacity-fill{height:100%;background:linear-gradient(90deg,#4d9f7a,#ffe18a)}.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}.calendar-head,.calendar-day{min-height:72px;padding:8px;border:1px solid rgba(255,255,255,.08);border-radius:9px}.calendar-head{min-height:auto;text-align:center;color:#ffe7a1;font-size:12px}.calendar-day{background:rgba(255,255,255,.025)}.calendar-day.today{border-color:rgba(215,168,62,.65);box-shadow:inset 0 0 0 1px rgba(215,168,62,.2)}.calendar-day.empty{opacity:.25}.calendar-num{font-weight:bold}.calendar-event{display:block;margin-top:5px;padding:4px 5px;border-radius:6px;background:rgba(215,168,62,.13);color:#ffe7a1;text-decoration:none;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.calendar-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.calendar-nav button{padding:8px 12px}.flow-card{margin-top:14px;padding:14px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}@media(max-width:700px){.calendar{gap:3px}.calendar-head,.calendar-day{min-height:58px;padding:5px;font-size:11px}.calendar-event{font-size:9px;padding:3px}.filter-grid{grid-template-columns:1fr}}
 .nav-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.nav-actions a{margin-left:0}.translate-button{padding:9px 13px;font-size:13px}.translate-host{display:none!important}.badge{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:rgba(215,168,62,.12);border:1px solid rgba(215,168,62,.28);color:#ffe7a1;font-size:12px;font-weight:700}.table-wrap{overflow-x:auto}.action-panel{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.status-flow{display:grid;grid-template-columns:repeat(5,minmax(90px,1fr));gap:7px}.status-step{padding:8px 5px;border-radius:9px;background:rgba(255,255,255,.05);text-align:center;font-size:11px;color:#9fa8bd}.status-step.active{color:#ffe7a1;border:1px solid rgba(215,168,62,.45)}.progress-label{display:flex;justify-content:space-between;margin-bottom:7px;font-size:13px;color:#c8cede}.empty-state{text-align:center;padding:35px 20px}@media(max-width:700px){.status-flow{grid-template-columns:1fr}.nav-actions{width:100%}.container{padding:28px 14px}button,.button{min-height:44px}}
 .goog-te-banner-frame,
 .goog-te-banner-frame.skiptranslate,
@@ -1620,151 +1621,182 @@ def logout():
 def seva():
 
     user = current_user()
-
     db = get_db()
 
+    q = clean(request.args.get("q", ""), 100)
+    date_filter = clean(request.args.get("date", ""), 20)
+    location_filter = clean(request.args.get("location", ""), 100)
+    availability = clean(request.args.get("availability", "all"), 20)
+    time_filter = clean(request.args.get("time", "all"), 20)
+    sort = clean(request.args.get("sort", "soonest"), 20)
+
+    where = []
+    params = [user["id"]]
+
+    if q:
+        where.append("(lower(seva.title) LIKE lower(?) OR lower(seva.description) LIKE lower(?) OR lower(seva.location) LIKE lower(?))")
+        term = "%" + q + "%"
+        params.extend([term, term, term])
+    if date_filter:
+        where.append("seva.date = ?")
+        params.append(date_filter)
+    if location_filter:
+        where.append("lower(seva.location) LIKE lower(?)")
+        params.append("%" + location_filter + "%")
+    if availability == "available":
+        where.append("(seva.max_volunteers = 0 OR (SELECT COUNT(*) FROM signups s2 WHERE s2.seva_id = seva.id AND s2.status != 'rejected') < seva.max_volunteers)")
+    elif availability == "full":
+        where.append("(seva.max_volunteers > 0 AND (SELECT COUNT(*) FROM signups s2 WHERE s2.seva_id = seva.id AND s2.status != 'rejected') >= seva.max_volunteers)")
+    if time_filter == "morning":
+        where.append("CAST(seva.start_time AS time) < CAST('12:00' AS time)")
+    elif time_filter == "afternoon":
+        where.append("CAST(seva.start_time AS time) >= CAST('12:00' AS time) AND CAST(seva.start_time AS time) < CAST('17:00' AS time)")
+    elif time_filter == "evening":
+        where.append("CAST(seva.start_time AS time) >= CAST('17:00' AS time)")
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    order_sql = "seva.date ASC, seva.start_time ASC" if sort == "soonest" else "seva.date DESC, seva.start_time DESC"
+
     opportunities = db.execute(
-        """
-        SELECT
-            seva.*,
-            signups.id AS signup_id,
-            (SELECT COUNT(*) FROM signups s2 WHERE s2.seva_id = seva.id AND s2.status != 'rejected') AS signup_count
-
+        f"""
+        SELECT seva.*,
+               signups.id AS signup_id,
+               (SELECT COUNT(*) FROM signups s2 WHERE s2.seva_id = seva.id AND s2.status != 'rejected') AS signup_count
         FROM seva
-
-        LEFT JOIN signups
-            ON seva.id = signups.seva_id
-            AND signups.user_id = ?
-
-        ORDER BY
-            seva.date ASC,
-            seva.start_time ASC
+        LEFT JOIN signups ON seva.id = signups.seva_id AND signups.user_id = ?
+        {where_sql}
+        ORDER BY {order_sql}
         """,
-        (user["id"],)
+        tuple(params)
     ).fetchall()
 
+    calendar_rows = db.execute(
+        "SELECT id, title, date, start_time, end_time, location FROM seva ORDER BY date ASC, start_time ASC"
+    ).fetchall()
     db.close()
 
-    cards = ""
-
     token = h(csrf_token())
-
+    cards = ""
     for item in opportunities:
-
-        full = bool(item["max_volunteers"] and item["signup_count"] >= item["max_volunteers"])
+        filled = int(item["signup_count"] or 0)
+        capacity = int(item["max_volunteers"] or 0)
+        full = bool(capacity and filled >= capacity)
+        remaining = max(0, capacity - filled) if capacity else None
+        capacity_pct = min(100, round(filled / capacity * 100)) if capacity else 0
 
         if item["signup_id"]:
-
-            action = """
-            <span class="success">
-                ✓ Signed Up
-            </span>
-            """
-
+            action = '<span class="success">✓ Signed Up</span>'
         elif full:
-
-            action = """
-            <span class="warning">
-                Full — no spots remaining
-            </span>
-            """
-
+            action = '<span class="warning">Full — no spots remaining</span>'
         else:
-
             action = f"""
-            <form method="POST"
-                  action="/signup/{item["id"]}">
-
-                <input
-                    type="hidden"
-                    name="csrf_token"
-                    value="{token}"
-                >
-
-                <button>
-                    Sign Up
-                </button>
-
+            <form method="POST" action="/signup/{item["id"]}">
+                <input type="hidden" name="csrf_token" value="{token}">
+                <button>Sign Up</button>
             </form>
             """
 
+        capacity_html = (
+            f'<div class="small">👥 {filled} / {capacity} volunteers</div>'
+            f'<div class="capacity-bar"><div class="capacity-fill" style="width:{capacity_pct}%"></div></div>'
+            f'<div class="small">{remaining} spot(s) remaining</div>'
+            if capacity else
+            '<div class="small">👥 Open capacity</div>'
+        )
+
         cards += f"""
         <div class="card">
-
-            <h2>
-                {h(item["title"])}
-            </h2>
-
-            <p class="muted">
-                {h(item["description"])}
-            </p>
-
-            <p>
-                📍 {h(item["location"])}
-            </p>
-
-            <p>
-                📅 {h(item["date"])}
-            </p>
-
-            <p>
-                ⏰ {h(item["start_time"])}
-                –
-                {h(item["end_time"])}
-            </p>
-
-            <p class="small">
-                👥 {item["signup_count"]}/{item["max_volunteers"] if item["max_volunteers"] else "∞"} spots filled
-            </p>
-
-            {action}
-
+            <h2>{h(item["title"])}</h2>
+            <p class="muted">{h(item["description"])}</p>
+            <p>📍 {h(item["location"])}</p>
+            <p>📅 {h(item["date"])}</p>
+            <p>⏰ {h(format_time_label(item["start_time"]))} – {h(format_time_label(item["end_time"]))}</p>
+            {capacity_html}
+            <div class="action-panel">{action}</div>
         </div>
         """
 
     if not cards:
-
         cards = """
-        <div class="card">
-            <h2>No Seva Yet</h2>
-            <p class="muted">
-                The administrator hasn't created any
-                seva opportunities yet.
-            </p>
+        <div class="card empty-state">
+            <h2>🌱 No Sevas Found</h2>
+            <p class="muted">Try changing your filters or check back soon.</p>
         </div>
         """
+
+    calendar_data = json.dumps([
+        {"id": int(x["id"]), "title": str(x["title"]), "date": str(x["date"]),
+         "start_time": str(x["start_time"])[:5], "location": str(x["location"])}
+        for x in calendar_rows
+    ], ensure_ascii=False)
+
+    active_filters = []
+    if q: active_filters.append("Search: " + q)
+    if date_filter: active_filters.append("Date: " + date_filter)
+    if location_filter: active_filters.append("Location: " + location_filter)
+    if availability != "all": active_filters.append(availability.title())
+    if time_filter != "all": active_filters.append(time_filter.title())
+
+    chips = "".join(f'<span class="filter-chip">{h(x)}</span>' for x in active_filters)
+    filter_summary = f'<div class="filter-summary">{chips}</div>' if chips else '<p class="small">Showing all Seva opportunities.</p>'
 
     return layout(
         f"""
         <div class="container">
-
             <h1>Seva Opportunities</h1>
-
-            <p class="muted">
-                Find an opportunity and sign up.
-            </p>
-
-            <form method="GET" class="card" style="margin-bottom:20px">
-                <h2>🔎 Find Seva</h2>
-                <div class="grid">
-                    <label>Search
-                        <input name="q" value="{h(request.args.get("q", ""))}" placeholder="Shoes, food, community...">
-                    </label>
-                    <label>Date
-                        <input type="date" name="date" value="{h(request.args.get("date", ""))}">
-                    </label>
-                </div>
-                <button>Search</button>
-                <a class="button dark-button" href="/seva">Clear</a>
-            </form>
-
-            <p class="small" id="seva-live-status">
-                Live updates enabled • Calendar view below
-            </p>
+            <p class="muted">Find the right opportunity, check availability, and plan your service.</p>
 
             <div class="card">
-                <h2>📅 Seva Calendar</h2>
-                <div id="seva-calendar"></div>
+                <h2>🔎 Find Your Seva</h2>
+                <form method="GET">
+                    <div class="filter-grid">
+                        <label>Search
+                            <input name="q" value="{h(q)}" placeholder="Food, cleanup, community...">
+                        </label>
+                        <label>Date
+                            <input type="date" name="date" value="{h(date_filter)}">
+                        </label>
+                        <label>Location
+                            <input name="location" value="{h(location_filter)}" placeholder="Gurdwara, Fremont...">
+                        </label>
+                        <label>Availability
+                            <select name="availability">
+                                <option value="all" {"selected" if availability == "all" else ""}>All</option>
+                                <option value="available" {"selected" if availability == "available" else ""}>Available spots</option>
+                                <option value="full" {"selected" if availability == "full" else ""}>Full</option>
+                            </select>
+                        </label>
+                        <label>Time
+                            <select name="time">
+                                <option value="all" {"selected" if time_filter == "all" else ""}>Any time</option>
+                                <option value="morning" {"selected" if time_filter == "morning" else ""}>Morning</option>
+                                <option value="afternoon" {"selected" if time_filter == "afternoon" else ""}>Afternoon</option>
+                                <option value="evening" {"selected" if time_filter == "evening" else ""}>Evening</option>
+                            </select>
+                        </label>
+                        <label>Sort
+                            <select name="sort">
+                                <option value="soonest" {"selected" if sort == "soonest" else ""}>Soonest first</option>
+                                <option value="latest" {"selected" if sort == "latest" else ""}>Latest first</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="filter-actions">
+                        <button>Apply Filters</button>
+                        <a class="button dark-button" href="/seva">Clear Filters</a>
+                    </div>
+                </form>
+                {filter_summary}
+            </div>
+
+            <div class="card">
+                <div class="calendar-nav">
+                    <button type="button" class="dark-button" onclick="changeCalendar(-1)">← Previous</button>
+                    <h2 id="calendar-title" style="margin:0">Seva Calendar</h2>
+                    <button type="button" class="dark-button" onclick="changeCalendar(1)">Next →</button>
+                </div>
+                <div id="seva-calendar" class="calendar"></div>
+                <p class="small">Click a Seva on the calendar to filter the list by that date.</p>
             </div>
 
             <div class="grid" id="seva-list">
@@ -1772,68 +1804,38 @@ def seva():
             </div>
 
             <script>
-                const sevaList = document.getElementById("seva-list");
-                const liveStatus = document.getElementById("seva-live-status");
-                const csrfToken = {token!r};
-
-                function escapeHtml(value) {{
-                    const element = document.createElement("div");
-                    element.textContent = value ?? "";
-                    return element.innerHTML;
+            const calendarItems = {calendar_data};
+            let calendarCursor = new Date();
+            function renderCalendar() {{
+                const root = document.getElementById("seva-calendar");
+                const title = document.getElementById("calendar-title");
+                if (!root || !title) return;
+                const year = calendarCursor.getFullYear();
+                const month = calendarCursor.getMonth();
+                const first = new Date(year, month, 1);
+                const last = new Date(year, month + 1, 0);
+                title.textContent = first.toLocaleString(undefined, {{month:"long", year:"numeric"}}) + " Seva Calendar";
+                const names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                root.innerHTML = names.map(function(n) {{ return '<div class="calendar-head">' + n + '</div>'; }}).join("");
+                for (let i = 0; i < first.getDay(); i++) root.innerHTML += '<div class="calendar-day empty"></div>';
+                const today = new Date();
+                for (let day = 1; day <= last.getDate(); day++) {{
+                    const key = year + "-" + String(month + 1).padStart(2,"0") + "-" + String(day).padStart(2,"0");
+                    const events = calendarItems.filter(function(x) {{ return x.date === key; }});
+                    const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
+                    let eventHtml = "";
+                    events.forEach(function(x) {{
+                        eventHtml += '<a class="calendar-event" href="/seva?date=' + encodeURIComponent(x.date) + '">' + x.start_time + ' · ' + x.title + '</a>';
+                    }});
+                    root.innerHTML += '<div class="calendar-day ' + (isToday ? "today" : "") + '"><div class="calendar-num">' + day + '</div>' + eventHtml + '</div>';
                 }}
-
-                function renderSeva(items) {{
-                    if (!items.length) {{
-                        sevaList.innerHTML = `
-                            <div class="card">
-                                <h2>No Seva Yet</h2>
-                                <p class="muted">
-                                    The administrator hasn't created any
-                                    seva opportunities yet.
-                                </p>
-                            </div>`;
-                        return;
-                    }}
-
-                    sevaList.innerHTML = items.map(item => {{
-                        const action = item.signed_up
-                            ? '<span class="success">✓ Signed Up</span>'
-                            : `<form method="POST" action="/signup/${{item.id}}">
-                                <input type="hidden" name="csrf_token" value="${{csrfToken}}">
-                                <button>Sign Up</button>
-                            </form>`;
-
-                        return `
-                            <div class="card">
-                                <h2>${{escapeHtml(item.title)}}</h2>
-                                <p class="muted">${{escapeHtml(item.description)}}</p>
-                                <p>📍 ${{escapeHtml(item.location)}}</p>
-                                <p>📅 ${{escapeHtml(item.date)}}</p>
-                                <p>⏰ ${{escapeHtml(item.start_time)}} – ${{escapeHtml(item.end_time)}}</p>
-                                ${{action}}
-                            </div>`;
-                    }}).join("");
-                }}
-
-                async function refreshSeva() {{
-                    try {{
-                        const response = await fetch("/api/seva", {{
-                            headers: {{"Accept": "application/json"}},
-                            cache: "no-store"
-                        }});
-
-                        if (!response.ok) throw new Error("Refresh failed");
-
-                        renderSeva(await response.json());
-                        liveStatus.textContent = "Live updates enabled • Updated just now";
-                    }} catch (error) {{
-                        liveStatus.textContent = "Live updates temporarily unavailable";
-                    }}
-                }}
-
-                window.setInterval(refreshSeva, 5000);
+            }}
+            function changeCalendar(delta) {{
+                calendarCursor.setMonth(calendarCursor.getMonth() + delta);
+                renderCalendar();
+            }}
+            renderCalendar();
             </script>
-
         </div>
         """,
         "Seva"
@@ -1845,44 +1847,24 @@ def seva():
 def seva_api():
 
     user = current_user()
-
     db = get_db()
-
     opportunities = db.execute(
         """
-        SELECT
-            seva.id,
-            seva.title,
-            seva.description,
-            seva.location,
-            seva.date,
-            seva.start_time,
-            seva.end_time,
-            EXISTS(
-                SELECT 1
-                FROM signups
-                WHERE signups.seva_id = seva.id
-                AND signups.user_id = ?
-            ) AS signed_up
+        SELECT seva.id, seva.title, seva.description, seva.location, seva.date,
+               seva.start_time, seva.end_time, seva.max_volunteers,
+               (SELECT COUNT(*) FROM signups s2 WHERE s2.seva_id = seva.id AND s2.status != 'rejected') AS signup_count,
+               EXISTS(SELECT 1 FROM signups WHERE signups.seva_id = seva.id AND signups.user_id = ?) AS signed_up
         FROM seva
         ORDER BY seva.date ASC, seva.start_time ASC
         """,
         (user["id"],)
     ).fetchall()
-
     db.close()
-
     return jsonify([
-        {
-            "id": item["id"],
-            "title": item["title"],
-            "description": item["description"],
-            "location": item["location"],
-            "date": item["date"],
-            "start_time": item["start_time"],
-            "end_time": item["end_time"],
-            "signed_up": bool(item["signed_up"]),
-        }
+        {"id": item["id"], "title": item["title"], "description": item["description"],
+         "location": item["location"], "date": str(item["date"]), "start_time": str(item["start_time"])[:5],
+         "end_time": str(item["end_time"])[:5], "signed_up": bool(item["signed_up"]),
+         "signup_count": int(item["signup_count"] or 0), "max_volunteers": int(item["max_volunteers"] or 0)}
         for item in opportunities
     ])
 
