@@ -1047,7 +1047,7 @@ footer {
 
 }
 
-</style>
+.nav-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.nav-actions a{margin-left:0}.translate-button{padding:9px 13px;font-size:13px}.translate-host{display:none!important}.badge{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:rgba(215,168,62,.12);border:1px solid rgba(215,168,62,.28);color:#ffe7a1;font-size:12px;font-weight:700}.table-wrap{overflow-x:auto}.action-panel{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.status-flow{display:grid;grid-template-columns:repeat(5,minmax(90px,1fr));gap:7px}.status-step{padding:8px 5px;border-radius:9px;background:rgba(255,255,255,.05);text-align:center;font-size:11px;color:#9fa8bd}.status-step.active{color:#ffe7a1;border:1px solid rgba(215,168,62,.45)}.progress-label{display:flex;justify-content:space-between;margin-bottom:7px;font-size:13px;color:#c8cede}.empty-state{text-align:center;padding:35px 20px}@media(max-width:700px){.status-flow{grid-template-columns:1fr}.nav-actions{width:100%}.container{padding:28px 14px}button,.button{min-height:44px}}</style>
 """
 
 
@@ -1058,6 +1058,15 @@ footer {
 def layout(content, title="Smart Seva"):
 
     user = current_user()
+
+    unread_count = 0
+    if user and user["role"] != "admin":
+        try:
+            db = get_db()
+            unread_count = int(db.execute("SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = FALSE", (user["id"],)).fetchone()["count"] or 0)
+            db.close()
+        except Exception:
+            unread_count = 0
 
     if user:
 
@@ -1079,7 +1088,7 @@ def layout(content, title="Smart Seva"):
                 <a href="/paath">Paath</a>
                 <a href="/pantry">Pantry</a>
                 <a href="/profile">Profile</a>
-                <a href="/notifications">🔔</a>
+                <a href="/notifications" aria-label="Notifications">🔔{unread_count and f"<span class=\'badge\'>{unread_count}</span>" or ""}</a>
                 <a href="/logout">Logout</a>
             """
 
@@ -1127,11 +1136,11 @@ def layout(content, title="Smart Seva"):
                 </span>
             </div>
 
-            <div>
+            <div class="nav-actions">
                 {nav}
-                <a href="https://translate.google.com/?sl=auto&tl=pa&op=translate&u="
-                   target="_blank" rel="noopener">🌐 ਪੰਜਾਬੀ</a>
+                <button type="button" class="translate-button dark-button" onclick="translatePageToPunjabi()">ਪੰਜਾਬੀ</button>
             </div>
+            <div id="google_translate_element" class="translate-host" aria-hidden="true"></div>
 
         </nav>
 
@@ -1140,6 +1149,11 @@ def layout(content, title="Smart Seva"):
         <footer>
             ੴ • Seva • Sangat • Chardi Kala
         </footer>
+        <script>
+        function googleTranslateElementInit(){new google.translate.TranslateElement({pageLanguage:"en",includedLanguages:"pa",autoDisplay:false,layout:google.translate.TranslateElement.InlineLayout.SIMPLE},"google_translate_element");}
+        function translatePageToPunjabi(){const select=document.querySelector(".goog-te-combo");if(select){select.value="pa";select.dispatchEvent(new Event("change"));}else{setTimeout(translatePageToPunjabi,300);}}
+        </script>
+        <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
 
     </body>
 
