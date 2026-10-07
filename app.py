@@ -2874,6 +2874,35 @@ def dashboard():
     ).fetchone()
     completed_count = int(completed_count_row["count"] or 0)
 
+    monthly_row = db.execute(
+        """
+        SELECT COALESCE(SUM(signups.hours), 0) AS hours
+        FROM signups
+        JOIN seva ON seva.id = signups.seva_id
+        WHERE signups.user_id = ?
+          AND signups.status = 'approved'
+          AND CAST(seva.date AS date) >= date_trunc('month', CURRENT_DATE)
+          AND CAST(seva.date AS date) < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+        """,
+        (user["id"],)
+    ).fetchone()
+    monthly_hours = float(monthly_row["hours"] or 0)
+
+    next_seva = db.execute(
+        """
+        SELECT signups.id, signups.status, seva.title, seva.date, seva.start_time,
+               seva.end_time, seva.location, signups.check_in, signups.check_out
+        FROM signups
+        JOIN seva ON seva.id = signups.seva_id
+        WHERE signups.user_id = ?
+          AND signups.status = 'pending'
+          AND CAST(seva.date AS date) >= CURRENT_DATE
+        ORDER BY seva.date ASC, seva.start_time ASC
+        LIMIT 1
+        """,
+        (user["id"],)
+    ).fetchone()
+
     badges = milestone_badges(total, completed_count)
     badges_html = " ".join(f"<span class='button' style='display:inline-block;margin:4px'>{h(b)}</span>" for b in badges) or "<span class='muted'>Complete your first Seva to earn a milestone.</span>"
 
@@ -2904,6 +2933,31 @@ def dashboard():
             1
         )
     )
+
+    monthly_goal = max(1, min(goal, 10))
+    monthly_percentage = min(100, round(monthly_hours / monthly_goal * 100, 1))
+
+    next_seva_html = ""
+    if next_seva:
+        checkin_active = "active" if next_seva["check_in"] else ""
+        checkout_active = "active" if next_seva["check_out"] else ""
+        next_seva_html = f"""
+        <div class="card">
+            <h2>🚀 Your Next Seva</h2>
+            <div class="flow-card">
+                <h3>{h(next_seva["title"])}</h3>
+                <p>📅 {h(next_seva["date"])} • ⏰ {h(format_time_label(next_seva["start_time"]))} – {h(format_time_label(next_seva["end_time"]))}</p>
+                <p>📍 {h(next_seva["location"])}</p>
+                <div class="status-flow">
+                    <div class="status-step active">1. Sign Up</div>
+                    <div class="status-step {checkin_active}">2. Check In</div>
+                    <div class="status-step {checkout_active}">3. Check Out</div>
+                    <div class="status-step">4. Await Approval</div>
+                    <div class="status-step">5. Verified</div>
+                </div>
+            </div>
+        </div>
+        """
 
     certificate_button = ""
 
@@ -3140,29 +3194,27 @@ def dashboard():
             </div>
 
             <div class="card">
-
-                <h2>
-                    🎯 Seva Goal
-                </h2>
-
-                <div class="progress">
-
-                    <div
-                        class="progress-bar"
-                        style="width:{percentage}%"
-                    ></div>
-
-                </div>
-
-                <p>
-                    {round(total,2)}
-                    /
-                    {round(goal,2)}
-                    hours
-                </p>
-
+                <h2>🎯 Seva Goal</h2>
+                <div class="progress-label"><span>Overall goal</span><strong>{percentage}%</strong></div>
+                <div class="progress"><div class="progress-bar" style="width:{percentage}%"></div></div>
+                <p>{round(total,2)} / {round(goal,2)} verified hours</p>
                 {certificate_button}
+                <div class="flow-card">
+                    <div class="progress-label"><span>Monthly momentum</span><strong>{monthly_percentage}%</strong></div>
+                    <div class="progress"><div class="progress-bar" style="width:{monthly_percentage}%"></div></div>
+                    <p class="small">{round(monthly_hours,2)} approved hours this month • target {round(monthly_goal,2)} hours</p>
+                </div>
+            </div>
 
+            {next_seva_html}
+
+            <div class="card">
+                <h2>📊 My Seva Progress</h2>
+                <div class="filter-summary">
+                    <span class="filter-chip">Completed: {completed_count}</span>
+                    <span class="filter-chip">Verified: {round(total,2)} hours</span>
+                    <span class="filter-chip">Goal: {percentage}%</span>
+                </div>
             </div>
 
             <div class="card">
