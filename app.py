@@ -1048,7 +1048,7 @@ footer {
 }
 
 .filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end}.filter-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.filter-summary{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.filter-chip{padding:7px 11px;border:1px solid rgba(215,168,62,.25);border-radius:999px;background:rgba(255,255,255,.05);font-size:12px}.capacity-bar{height:8px;border-radius:20px;background:rgba(255,255,255,.1);overflow:hidden;margin:7px 0 10px}.capacity-fill{height:100%;background:linear-gradient(90deg,#4d9f7a,#ffe18a)}.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}.calendar-head,.calendar-day{min-height:72px;padding:8px;border:1px solid rgba(255,255,255,.08);border-radius:9px}.calendar-head{min-height:auto;text-align:center;color:#ffe7a1;font-size:12px}.calendar-day{background:rgba(255,255,255,.025)}.calendar-day.today{border-color:rgba(215,168,62,.65);box-shadow:inset 0 0 0 1px rgba(215,168,62,.2)}.calendar-day.empty{opacity:.25}.calendar-num{font-weight:bold}.calendar-event{display:block;margin-top:5px;padding:4px 5px;border-radius:6px;background:rgba(215,168,62,.13);color:#ffe7a1;text-decoration:none;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.calendar-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.calendar-nav button{padding:8px 12px}.flow-card{margin-top:14px;padding:14px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}@media(max-width:700px){.calendar{gap:3px}.calendar-head,.calendar-day{min-height:58px;padding:5px;font-size:11px}.calendar-event{font-size:9px;padding:3px}.filter-grid{grid-template-columns:1fr}}
-.nav-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.nav-actions a{margin-left:0}.translate-button{padding:9px 13px;font-size:13px}.translate-host{display:none!important}.badge{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:rgba(215,168,62,.12);border:1px solid rgba(215,168,62,.28);color:#ffe7a1;font-size:12px;font-weight:700}.table-wrap{overflow-x:auto}.action-panel{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.status-flow{display:grid;grid-template-columns:repeat(5,minmax(90px,1fr));gap:7px}.status-step{padding:8px 5px;border-radius:9px;background:rgba(255,255,255,.05);text-align:center;font-size:11px;color:#9fa8bd}.status-step.active{color:#ffe7a1;border:1px solid rgba(215,168,62,.45)}.progress-label{display:flex;justify-content:space-between;margin-bottom:7px;font-size:13px;color:#c8cede}.empty-state{text-align:center;padding:35px 20px}@media(max-width:700px){.status-flow{grid-template-columns:1fr}.nav-actions{width:100%}.container{padding:28px 14px}button,.button{min-height:44px}}
+.nav-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.nav-actions a{margin-left:0}.translate-button{padding:9px 13px;font-size:13px}.translate-host{display:none!important}.badge{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:rgba(215,168,62,.12);border:1px solid rgba(215,168,62,.28);color:#ffe7a1;font-size:12px;font-weight:700}.table-wrap{overflow-x:auto}.action-panel{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.status-flow{display:grid;grid-template-columns:repeat(5,minmax(90px,1fr));gap:7px}.status-step{padding:8px 5px;border-radius:9px;background:rgba(255,255,255,.05);text-align:center;font-size:11px;color:#9fa8bd}.status-step.active{color:#ffe7a1;border:1px solid rgba(215,168,62,.45)}.progress-label{display:flex;justify-content:space-between;margin-bottom:7px;font-size:13px;color:#c8cede}.pantry-progress{margin:14px 0 18px}.pantry-progress-track{height:10px;border-radius:999px;background:rgba(255,255,255,.09);border:1px solid rgba(215,168,62,.18);overflow:hidden}.pantry-progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#b9872d,#ffe7a1);box-shadow:0 0 16px rgba(215,168,62,.28);transition:width .5s ease}.empty-state{text-align:center;padding:35px 20px}@media(max-width:700px){.status-flow{grid-template-columns:1fr}.nav-actions{width:100%}.container{padding:28px 14px}button,.button{min-height:44px}}
 .goog-te-banner-frame,
 .goog-te-banner-frame.skiptranslate,
 iframe.goog-te-banner-frame {
@@ -2551,6 +2551,7 @@ def pantry_needs():
         needed = float(need["quantity_needed"])
         committed = float(need["committed"] or 0)
         remaining = max(0, needed - committed)
+        progress_percent = min(100, round((committed / needed) * 100, 1)) if needed > 0 else 0
         unit = canonical_unit(need["unit"])
         display_unit = "lb" if unit == "lb" else ("kg" if unit == "kg" else need["unit"])
 
@@ -2592,6 +2593,12 @@ def pantry_needs():
             <h2>{h(need["ingredient"])}</h2>
             <p class="muted">{h(need["details"])}</p>
             <p><strong>{format_quantity(remaining)} {h(display_unit)} still needed</strong></p>
+            <div class="pantry-progress" aria-label="{format_quantity(committed)} of {format_quantity(needed)} {h(display_unit)} covered">
+                <div class="progress-label"><span>{format_quantity(committed)} / {format_quantity(needed)} {h(display_unit)} covered</span><span>{progress_percent}%</span></div>
+                <div class="pantry-progress-track" role="progressbar" aria-valuenow="{progress_percent}" aria-valuemin="0" aria-valuemax="100">
+                    <div class="pantry-progress-fill" style="width:{progress_percent}%"></div>
+                </div>
+            </div>
             <p class="small">Bring by: {h(need["needed_by"] or "As soon as possible")}</p>
             {action}
         </div>
