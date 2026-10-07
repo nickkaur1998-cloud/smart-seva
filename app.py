@@ -1169,7 +1169,6 @@ def layout(content, title="Smart Seva"):
                 {nav}
                 <button type="button" class="translate-button dark-button" onclick="translatePageToPunjabi()">ਪੰਜਾਬੀ</button>
             </div>
-            <div id="google_translate_element" class="translate-host" aria-hidden="true"></div>
 
         </nav>
 
@@ -1179,45 +1178,121 @@ def layout(content, title="Smart Seva"):
             ੴ • Seva • Sangat • Chardi Kala
         </footer>
         <script>
-        function googleTranslateElementInit(){{
-    new google.translate.TranslateElement(
-        {{pageLanguage:"en",includedLanguages:"pa",autoDisplay:false}},
-        "google_translate_element"
-    );
-}}
+        async function translatePageToPunjabi() {
+            const button = document.querySelector(".translate-button");
+            if (button) {
+                button.disabled = true;
+                button.textContent = "ਪੰਜਾਬੀ…";
+            }
 
-function fireTranslateChange(element){{
-    if(!element) return;
-    try{{
-        element.dispatchEvent(new Event("change",{{bubbles:true}}));
-    }}catch(e){{
-        var event=document.createEvent("HTMLEvents");
-        event.initEvent("change",true,true);
-        element.dispatchEvent(event);
-    }}
-}}
+            const nodes = [];
+            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+                acceptNode(node) {
+                    const parent = node.parentElement;
+                    if (!parent) return NodeFilter.FILTER_REJECT;
+                    if (parent.closest("script, style, noscript, textarea, input, select, option, button")) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            });
 
-function translatePageToPunjabi(){{
-    var select=document.querySelector(".goog-te-combo");
-    if(select){{
-        select.value="pa";
-        fireTranslateChange(select);
-        return;
-    }}
-    setTimeout(function(){{
-        var retry=document.querySelector(".goog-te-combo");
-        if(retry){{
-            retry.value="pa";
-            fireTranslateChange(retry);
-        }}
-    }},500);
-}}</script>
-        <script src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+            let node;
+            while ((node = walker.nextNode())) nodes.push(node);
+            const texts = nodes.map(n => n.nodeValue);
+
+            try {
+                const response = await fetch("/api/translate", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({texts: texts, target: "pa"})
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || "Translation failed.");
+
+                if (Array.isArray(data.translations)) {
+                    nodes.forEach((n, i) => {
+                        if (data.translations[i]) n.nodeValue = data.translations[i];
+                    });
+                }
+            } catch (error) {
+                console.error(error);
+                alert("Punjabi translation is temporarily unavailable.");
+            } finally {
+                if (button) {
+                    button.disabled = false;
+                    button.textContent = "ਪੰਜਾਬੀ";
+                }
+            }
+        }
+        </script>
 
     </body>
 
     </html>
     """
+
+
+# ============================================================
+# TRANSLATION
+# ============================================================
+
+@app.route("/api/translate", methods=["POST"])
+@login_required
+def translate_api():
+    """Translate page text through Google Cloud Translation Basic (v2)."""
+    api_key = os.environ.get("GOOGLE_TRANSLATE_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"error": "Translation API is not configured."}), 503
+
+    payload = request.get_json(silent=True) or {}
+    texts = payload.get("texts", [])
+    target = clean(payload.get("target", "pa"), 10)
+
+    if target != "pa" or not isinstance(texts, list):
+        return jsonify({"error": "Invalid translation request."}), 400
+
+    texts = [str(item) for item in texts if str(item).strip()]
+    if not texts:
+        return jsonify({"translations": []})
+    if len(texts) > 128:
+        return jsonify({"error": "Too many text items in one request."}), 400
+    if sum(len(item) for item in texts) > 30000:
+        return jsonify({"error": "Page is too large to translate at once."}), 400
+
+    req = Request(
+        "https://translation.googleapis.com/language/translate/v2?key=" + api_key,
+        data=json.dumps({
+            "q": texts,
+            "source": "en",
+            "target": "pa",
+            "format": "text"
+        }).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "Accept": "application/json"
+        }
+    )
+
+    try:
+        with urlopen(req, timeout=20) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        translations = [
+            item.get("translatedText", "")
+            for item in result.get("data", {}).get("translations", [])
+        ]
+        return jsonify({"translations": translations})
+    except HTTPError as error:
+        try:
+            details = json.loads(error.read().decode("utf-8"))
+        except Exception:
+            details = {}
+        message = details.get("error", {}).get("message", "Translation service request failed.")
+        return jsonify({"error": message}), 502
+    except (URLError, TimeoutError):
+        return jsonify({"error": "Translation service could not be reached."}), 502
 
 
 # ============================================================
