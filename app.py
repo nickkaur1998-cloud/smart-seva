@@ -216,13 +216,32 @@ def init_db():
         db.execute("CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications(user_id, is_read, created_at DESC)")
         db.commit()
 
-        admin_email = os.environ.get("SMART_SEVA_ADMIN_EMAIL", "").strip().lower()
-        if admin_email:
-            db.execute(
-                "UPDATE public.users SET role = 'admin' WHERE lower(email) = lower(?)",
-                (admin_email,)
-            )
-            db.commit()
+        role_emails = {
+            "admin": os.environ.get("SMART_SEVA_ADMIN_EMAIL", "").strip().lower(),
+            "seva_admin": os.environ.get("SMART_SEVA_SEVA_ADMIN_EMAIL", "").strip().lower(),
+            "paath_admin": os.environ.get("SMART_SEVA_PAATH_ADMIN_EMAIL", "").strip().lower(),
+            "pantry_admin": os.environ.get("SMART_SEVA_PANTRY_ADMIN_EMAIL", "").strip().lower(),
+            "events_admin": os.environ.get("SMART_SEVA_EVENTS_ADMIN_EMAIL", "").strip().lower(),
+        }
+
+        configured_emails = [email for email in role_emails.values() if email]
+        if len(configured_emails) != len(set(configured_emails)):
+            raise RuntimeError("Each Smart Seva admin role must use a different email address.")
+
+        # These management roles are controlled by the deployment settings.
+        # Reset them first so placeholder emails can safely be replaced later.
+        db.execute(
+            "UPDATE public.users SET role = 'student' WHERE role IN ('admin', 'seva_admin', 'paath_admin', 'pantry_admin', 'events_admin')"
+        )
+
+        for role, email in role_emails.items():
+            if email:
+                db.execute(
+                    "UPDATE public.users SET role = ? WHERE lower(email) = lower(?)",
+                    (role, email)
+                )
+
+        db.commit()
     finally:
         db.close()
 
@@ -404,22 +423,52 @@ def login_required(function):
     return wrapper
 
 
+def role_required(*allowed_roles):
+    def decorator(function):
+        @wraps(function)
+        def wrapper(*args, **kwargs):
+            user = current_user()
+            if not user:
+                return redirect(url_for("login", next=request.path))
+            if user["role"] not in allowed_roles:
+                abort(403)
+            return function(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
 def admin_required(function):
+    return role_required("admin")(function)
 
-    @wraps(function)
-    def wrapper(*args, **kwargs):
 
-        user = current_user()
+def seva_admin_required(function):
+    return role_required("admin", "seva_admin")(function)
 
-        if not user or user["role"] != "admin":
 
-            return redirect(
-                url_for("login")
-            )
+def paath_admin_required(function):
+    return role_required("admin", "paath_admin")(function)
 
-        return function(*args, **kwargs)
 
-    return wrapper
+def pantry_admin_required(function):
+    return role_required("admin", "pantry_admin")(function)
+
+
+def events_admin_required(function):
+    return role_required("admin", "events_admin")(function)
+
+
+def management_home():
+    user = current_user()
+    if not user:
+        return redirect(url_for("login"))
+    destinations = {
+        "admin": "admin",
+        "seva_admin": "admin_seva",
+        "paath_admin": "admin_paath",
+        "pantry_admin": "admin_pantry",
+        "events_admin": "admin_events",
+    }
+    return redirect(url_for(destinations.get(user["role"], "dashboard")))
 
 
 def notify_user(user_id, title, message, link=None):
@@ -1086,7 +1135,7 @@ def layout(content, title="Smart Seva"):
     user = current_user()
 
     unread_count = 0
-    if user and user["role"] != "admin":
+    if user and user["role"] == "student":
         try:
             db = get_db()
             unread_count = int(db.execute("SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = FALSE", (user["id"],)).fetchone()["count"] or 0)
@@ -1099,27 +1148,53 @@ def layout(content, title="Smart Seva"):
     if user:
 
         if user["role"] == "admin":
-
             nav = """
                 <a href="/admin">Dashboard</a>
                 <a href="/admin/seva">Manage Seva</a>
                 <a href="/admin/paath">Manage Paath</a>
-                <a href="/admin/pantry">Manage Pantry Needs</a>
+                <a href="/admin/pantry">Manage Pantry</a>
+                <a href="/admin/events">Manage Events</a>
+                <a href="/events">Events</a>
                 <a href="/logout">Logout</a>
             """
-
+        elif user["role"] == "seva_admin":
+            nav = """
+                <a href="/admin/seva">Manage Seva</a>
+                <a href="/seva">Seva</a>
+                <a href="/events">Events</a>
+                <a href="/logout">Logout</a>
+            """
+        elif user["role"] == "paath_admin":
+            nav = """
+                <a href="/admin/paath">Manage Paath</a>
+                <a href="/paath">Paath</a>
+                <a href="/events">Events</a>
+                <a href="/logout">Logout</a>
+            """
+        elif user["role"] == "pantry_admin":
+            nav = """
+                <a href="/admin/pantry">Manage Pantry</a>
+                <a href="/pantry">Pantry</a>
+                <a href="/events">Events</a>
+                <a href="/logout">Logout</a>
+            """
+        elif user["role"] == "events_admin":
+            nav = """
+                <a href="/admin/events">Manage Events</a>
+                <a href="/events">Events</a>
+                <a href="/logout">Logout</a>
+            """
         else:
-
             nav = """
                 <a href="/dashboard">Dashboard</a>
                 <a href="/seva">Seva</a>
                 <a href="/paath">Paath</a>
                 <a href="/pantry">Pantry</a>
+                <a href="/events">Events</a>
                 <a href="/profile">Profile</a>
                 <a href="/notifications" aria-label="Notifications">🔔{notification_link}</a>
                 <a href="/logout">Logout</a>
             """
-
             nav = nav.replace("{notification_link}", notification_link)
 
     else:
@@ -1558,8 +1633,8 @@ def login():
             session["user_id"] = str(user["id"])
             session["csrf_token"] = secrets.token_urlsafe(32)
 
-            if user["role"] == "admin":
-                return redirect(url_for("admin"))
+            if user["role"] in ("admin", "seva_admin", "paath_admin", "pantry_admin", "events_admin"):
+                return management_home()
 
             return redirect(url_for("dashboard"))
 
@@ -2027,7 +2102,7 @@ def paath_signup(paath_id):
 
 
 @app.route("/admin/paath")
-@admin_required
+@paath_admin_required
 def admin_paath():
 
     db = get_db()
@@ -2157,7 +2232,7 @@ def admin_paath():
 
 
 @app.route("/admin/paath/create", methods=["POST"])
-@admin_required
+@paath_admin_required
 def create_paath():
 
     validate_csrf()
@@ -2196,7 +2271,7 @@ def create_paath():
 
 
 @app.route("/admin/paath/request/<int:request_id>/<status>", methods=["POST"])
-@admin_required
+@paath_admin_required
 def update_paath_request(request_id, status):
 
     validate_csrf()
@@ -2214,7 +2289,7 @@ def update_paath_request(request_id, status):
 
 
 @app.route("/admin/paath/delete/<int:paath_id>", methods=["POST"])
-@admin_required
+@paath_admin_required
 def delete_paath(paath_id):
 
     validate_csrf()
@@ -2685,7 +2760,7 @@ def pantry_signup(need_id):
 
 
 @app.route("/admin/pantry")
-@admin_required
+@pantry_admin_required
 def admin_pantry():
 
     db = get_db()
@@ -2768,7 +2843,7 @@ def admin_pantry():
 
 
 @app.route("/admin/pantry/create", methods=["POST"])
-@admin_required
+@pantry_admin_required
 def create_pantry_need():
 
     validate_csrf()
@@ -2805,7 +2880,7 @@ def create_pantry_need():
 
 
 @app.route("/admin/pantry/archive/<int:need_id>", methods=["POST"])
-@admin_required
+@pantry_admin_required
 def archive_pantry_need(need_id):
 
     validate_csrf()
@@ -4082,11 +4157,182 @@ def verify_certificate(verification_code):
 
 
 # ============================================================
+# SPECIAL EVENTS
+# ============================================================
+
+@app.route("/events")
+@login_required
+def events():
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT *
+        FROM public.special_events
+        WHERE status = 'published'
+        ORDER BY date ASC, start_time ASC, id ASC
+        """
+    ).fetchall()
+    db.close()
+
+    cards = ""
+    for event in rows:
+        time_text = ""
+        if event["start_time"]:
+            time_text = format_time_label(event["start_time"])
+            if event["end_time"]:
+                time_text += " – " + format_time_label(event["end_time"])
+
+        cards += f"""
+        <div class="card">
+            <div class="small">SPECIAL EVENT</div>
+            <h2>{h(event["title"])}</h2>
+            <p class="muted">{h(event["description"] or "")}</p>
+            <p>📅 {h(event["date"])}</p>
+            {f'<p>⏰ {h(time_text)}</p>' if time_text else ""}
+            {f'<p>📍 {h(event["location"])}</p>' if event["location"] else ""}
+        </div>
+        """
+
+    return layout(
+        f"""
+        <div class="container">
+            <h1>🎉 Special Events</h1>
+            <p class="muted">Stay updated on Hola Mahalla, Vaisakhi, and other special community gatherings.</p>
+            <div class="grid">
+                {cards or '<div class="card empty-state"><h2>No Special Events Yet</h2><p class="muted">Check back soon for upcoming community events.</p></div>'}
+            </div>
+        </div>
+        """,
+        "Special Events"
+    )
+
+
+@app.route("/admin/events")
+@events_admin_required
+def admin_events():
+    db = get_db()
+    rows = db.execute(
+        """
+        SELECT *
+        FROM public.special_events
+        ORDER BY date ASC, start_time ASC, id ASC
+        """
+    ).fetchall()
+    db.close()
+
+    token = h(csrf_token())
+    cards = ""
+    for event in rows:
+        status_class = "success" if event["status"] == "published" else "warning"
+        cards += f"""
+        <div class="card">
+            <h2>{h(event["title"])}</h2>
+            <p class="muted">{h(event["description"] or "")}</p>
+            <p>📅 {h(event["date"])}{f' • ⏰ {h(format_time_label(event["start_time"]))}' if event["start_time"] else ""}</p>
+            {f'<p>📍 {h(event["location"])}</p>' if event["location"] else ""}
+            <p><span class="{status_class}">{h(event["status"].title())}</span></p>
+            <form method="POST" action="/admin/events/delete/{event["id"]}" onsubmit="return confirm('Delete this special event?');">
+                <input type="hidden" name="csrf_token" value="{token}">
+                <button class="danger">Delete</button>
+            </form>
+        </div>
+        """
+
+    return layout(
+        f"""
+        <div class="container">
+            <h1>Manage Special Events</h1>
+            <p class="muted">Add and maintain upcoming community events.</p>
+            <div class="card">
+                <h2>➕ Add Special Event</h2>
+                <form method="POST" action="/admin/events/create">
+                    <input type="hidden" name="csrf_token" value="{token}">
+                    <label>Event Name<input name="title" maxlength="150" placeholder="Hola Mahalla" required></label>
+                    <label>Description<textarea name="description" maxlength="1500" placeholder="Describe the event..." required></textarea>
+                    <div class="grid">
+                        <label>Date<input type="date" name="date" required></label>
+                        <label>Start Time<input type="time" name="start_time"></label>
+                        <label>End Time<input type="time" name="end_time"></label>
+                        <label>Location<input name="location" maxlength="250" placeholder="Gurdwara / Community Center"></label>
+                    </div>
+                    <label>Status
+                        <select name="status">
+                            <option value="published">Published</option>
+                            <option value="draft">Draft</option>
+                        </select>
+                    </label>
+                    <button>Save Event</button>
+                </form>
+            </div>
+            <div class="grid">
+                {cards or '<div class="card"><h2>No events created yet.</h2></div>'}
+            </div>
+        </div>
+        """,
+        "Manage Special Events"
+    )
+
+
+@app.route("/admin/events/create", methods=["POST"])
+@events_admin_required
+def create_event():
+    validate_csrf()
+
+    title = clean(request.form.get("title"), 150)
+    description = clean(request.form.get("description"), 1500)
+    date = clean(request.form.get("date"), 20)
+    start_time = clean(request.form.get("start_time"), 20)
+    end_time = clean(request.form.get("end_time"), 20)
+    location = clean(request.form.get("location"), 250)
+    status = clean(request.form.get("status", "published"), 20)
+
+    if not title or not description or not date:
+        abort(400, "Event name, description, and date are required.")
+    if status not in ("published", "draft"):
+        abort(400, "Invalid event status.")
+
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+        if start_time:
+            datetime.strptime(start_time, "%H:%M")
+        if end_time:
+            datetime.strptime(end_time, "%H:%M")
+        if start_time and end_time and end_time <= start_time:
+            abort(400, "End time must be after start time.")
+    except ValueError:
+        abort(400, "Enter a valid event date or time.")
+
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO public.special_events
+        (title, description, date, start_time, end_time, location, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (title, description, date, start_time or None, end_time or None, location or None, status)
+    )
+    db.commit()
+    db.close()
+    return redirect(url_for("admin_events"))
+
+
+@app.route("/admin/events/delete/<int:event_id>", methods=["POST"])
+@events_admin_required
+def delete_event(event_id):
+    validate_csrf()
+    db = get_db()
+    db.execute("DELETE FROM public.special_events WHERE id = ?", (event_id,))
+    db.commit()
+    db.close()
+    return redirect(url_for("admin_events"))
+
+
+# ============================================================
 # ADMIN MANAGE SEVA
 # ============================================================
 
 @app.route("/admin/seva")
-@admin_required
+@seva_admin_required
 def admin_seva():
 
     db = get_db()
@@ -4839,7 +5085,7 @@ def admin():
     "/admin/create-seva",
     methods=["POST"]
 )
-@admin_required
+@seva_admin_required
 def create_seva():
 
     validate_csrf()
@@ -4976,7 +5222,7 @@ def create_seva():
     "/admin/delete-seva/<int:seva_id>",
     methods=["POST"]
 )
-@admin_required
+@seva_admin_required
 def delete_seva(seva_id):
 
     validate_csrf()
@@ -5007,7 +5253,7 @@ def delete_seva(seva_id):
     "/admin/approve/<int:signup_id>",
     methods=["POST"]
 )
-@admin_required
+@seva_admin_required
 def approve_signup(signup_id):
 
     validate_csrf()
@@ -5066,7 +5312,7 @@ def approve_signup(signup_id):
     "/admin/reject/<int:signup_id>",
     methods=["POST"]
 )
-@admin_required
+@seva_admin_required
 def reject_signup(signup_id):
 
     validate_csrf()
