@@ -1057,6 +1057,21 @@ iframe.goog-te-banner-frame {
 body {
     top: 0 !important;
 }
+
+#google_translate_element,
+.goog-te-banner-frame,
+iframe.goog-te-banner-frame,
+.goog-te-balloon-frame,
+#goog-gt-tt,
+.goog-tooltip,
+.goog-te-spinner-pos {
+    display: none !important;
+}
+
+.goog-text-highlight {
+    background: transparent !important;
+    box-shadow: none !important;
+}
 </style>
 """
 
@@ -1103,6 +1118,8 @@ def layout(content, title="Smart Seva"):
                 <a href="/notifications" aria-label="Notifications">🔔{notification_link}</a>
                 <a href="/logout">Logout</a>
             """
+
+            nav = nav.replace("{notification_link}", notification_link)
 
     else:
 
