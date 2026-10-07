@@ -3109,7 +3109,7 @@ def dashboard():
                 """
 
         rows += f"""
-        <tr>
+        <tr data-status="{h(status)}">
 
             <td>{h(item["title"])}</td>
 
@@ -3223,6 +3223,13 @@ def dashboard():
                     📋 My Seva
                 </h2>
 
+                <div class="filter-actions" style="margin-bottom:14px">
+                    <button type="button" class="dark-button" onclick="filterMySevas('all')">All</button>
+                    <button type="button" class="dark-button" onclick="filterMySevas('pending')">Pending</button>
+                    <button type="button" class="dark-button" onclick="filterMySevas('approved')">Approved</button>
+                    <button type="button" class="dark-button" onclick="filterMySevas('rejected')">Rejected</button>
+                </div>
+
                 <div style="overflow-x:auto">
 
                     <table>
@@ -3241,6 +3248,13 @@ def dashboard():
                     </table>
 
                 </div>
+                <script>
+                function filterMySevas(status) {{
+                    document.querySelectorAll("tr[data-status]").forEach(function(row) {{
+                        row.style.display = (status === "all" || row.dataset.status === status) ? "" : "none";
+                    }});
+                }}
+                </script>
 
             </div>
 
@@ -4299,6 +4313,9 @@ def admin():
 
             <td>
                 {item["signup_count"]}
+                /
+                {item["max_volunteers"] if item["max_volunteers"] else "∞"}
+                <div class="capacity-bar"><div class="capacity-fill" style="width:{min(100, round(item["signup_count"] / item["max_volunteers"] * 100)) if item["max_volunteers"] else 0}%"></div></div>
             </td>
 
             <td>
@@ -4694,7 +4711,7 @@ def admin():
                             </th>
 
                             <th>
-                                Signups
+                                Capacity
                             </th>
 
                             <th>
