@@ -2,3 +2,4 @@ Flask
 reportlab
 psycopg[binary]
 gunicorn
+qrcode
