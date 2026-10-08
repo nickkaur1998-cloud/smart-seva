@@ -2,6 +2,7 @@ import os
 import secrets
 import json
 import re
+import qrcode
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 from datetime import datetime, timezone
@@ -1098,6 +1099,7 @@ footer {
 
 .filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end}.filter-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.filter-summary{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.filter-chip{padding:7px 11px;border:1px solid rgba(215,168,62,.25);border-radius:999px;background:rgba(255,255,255,.05);font-size:12px}.capacity-bar{height:8px;border-radius:20px;background:rgba(255,255,255,.1);overflow:hidden;margin:7px 0 10px}.capacity-fill{height:100%;background:linear-gradient(90deg,#4d9f7a,#ffe18a)}.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}.calendar-head,.calendar-day{min-height:72px;padding:8px;border:1px solid rgba(255,255,255,.08);border-radius:9px}.calendar-head{min-height:auto;text-align:center;color:#ffe7a1;font-size:12px}.calendar-day{background:rgba(255,255,255,.025)}.calendar-day.today{border-color:rgba(215,168,62,.65);box-shadow:inset 0 0 0 1px rgba(215,168,62,.2)}.calendar-day.empty{opacity:.25}.calendar-num{font-weight:bold}.calendar-event{display:block;margin-top:5px;padding:4px 5px;border-radius:6px;background:rgba(215,168,62,.13);color:#ffe7a1;text-decoration:none;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.calendar-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.calendar-nav button{padding:8px 12px}.flow-card{margin-top:14px;padding:14px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}@media(max-width:700px){.calendar{gap:3px}.calendar-head,.calendar-day{min-height:58px;padding:5px;font-size:11px}.calendar-event{font-size:9px;padding:3px}.filter-grid{grid-template-columns:1fr}}
 .nav-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.nav-actions a{margin-left:0}.translate-button{padding:9px 13px;font-size:13px}.translate-host{display:none!important}.badge{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:rgba(215,168,62,.12);border:1px solid rgba(215,168,62,.28);color:#ffe7a1;font-size:12px;font-weight:700}.table-wrap{overflow-x:auto}.action-panel{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.status-flow{display:grid;grid-template-columns:repeat(5,minmax(90px,1fr));gap:7px}.status-step{padding:8px 5px;border-radius:9px;background:rgba(255,255,255,.05);text-align:center;font-size:11px;color:#9fa8bd}.status-step.active{color:#ffe7a1;border:1px solid rgba(215,168,62,.45)}.progress-label{display:flex;justify-content:space-between;margin-bottom:7px;font-size:13px;color:#c8cede}.pantry-progress{margin:14px 0 18px}.pantry-progress-track{height:10px;border-radius:999px;background:rgba(255,255,255,.09);border:1px solid rgba(215,168,62,.18);overflow:hidden}.pantry-progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#b9872d,#ffe7a1);box-shadow:0 0 16px rgba(215,168,62,.28);transition:width .5s ease}.empty-state{text-align:center;padding:35px 20px}@media(max-width:700px){.status-flow{grid-template-columns:1fr}.nav-actions{width:100%}.container{padding:28px 14px}button,.button{min-height:44px}}
+.qr-menu-button{padding:9px 13px;font-size:13px;cursor:pointer;border:1px solid rgba(215,168,62,.3);border-radius:10px;background:rgba(255,255,255,.05);color:#dce8ef}.qr-menu-button:hover{color:#ffe7a1;border-color:rgba(215,168,62,.65)}.qr-modal{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.72);align-items:center;justify-content:center;padding:20px}.qr-modal.open{display:flex}.qr-box{width:min(360px,100%);text-align:center;background:#0b1020;border:1px solid rgba(215,168,62,.35);border-radius:20px;padding:28px;box-shadow:0 25px 80px rgba(0,0,0,.5)}.qr-box img{width:230px;height:230px;max-width:80vw;background:white;padding:10px;border-radius:12px}.qr-close{margin-top:16px}.qr-url{word-break:break-all;font-size:12px;color:#9fa8bd;margin-top:12px}
 .goog-te-banner-frame,
 .goog-te-banner-frame.skiptranslate,
 iframe.goog-te-banner-frame {
@@ -1124,6 +1126,31 @@ iframe.goog-te-banner-frame,
 }
 </style>
 """
+
+
+# ============================================================
+# SITE QR CODE
+# ============================================================
+
+@app.route("/qr-code")
+def qr_code():
+    """Generate a QR code that opens the current Smart Seva site."""
+    site_url = request.url_root.rstrip("/")
+    qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    qr.add_data(site_url)
+    qr.make(fit=True)
+
+    image = qr.make_image(fill_color="black", back_color="white")
+    output = BytesIO()
+    image.save(output, format="PNG")
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype="image/png",
+        download_name="smart-seva-qr.png",
+        max_age=300,
+    )
 
 
 # ============================================================
@@ -1243,10 +1270,38 @@ def layout(content, title="Smart Seva"):
 
             <div class="nav-actions">
                 {nav}
+                <button type="button" class="qr-menu-button" onclick="openQrModal()" aria-label="Show QR code for Smart Seva">QR Code</button>
                 <button type="button" class="translate-button dark-button" onclick="translatePageToPunjabi()">ਪੰਜਾਬੀ</button>
             </div>
 
         </nav>
+
+        <div id="qr-modal" class="qr-modal" role="dialog" aria-modal="true" aria-labelledby="qr-title" onclick="closeQrModal(event)">
+            <div class="qr-box" onclick="event.stopPropagation()">
+                <h2 id="qr-title">📱 Scan to Open Smart Seva</h2>
+                <img src="/qr-code" alt="QR code for the Smart Seva website">
+                <p class="qr-url" id="qr-site-url"></p>
+                <button type="button" class="qr-close" onclick="closeQrModal()">Close</button>
+            </div>
+        </div>
+
+        <script>
+        function openQrModal() {{
+            const modal = document.getElementById("qr-modal");
+            const url = window.location.origin;
+            document.getElementById("qr-site-url").textContent = url;
+            modal.classList.add("open");
+        }}
+
+        function closeQrModal(event) {{
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById("qr-modal").classList.remove("open");
+        }}
+
+        document.addEventListener("keydown", function(event) {{
+            if (event.key === "Escape") closeQrModal();
+        }});
+        </script>
 
         {content}
 
