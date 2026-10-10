@@ -1215,6 +1215,8 @@ def layout(content, title="Smart Seva"):
             nav = """
                 <a href="/dashboard">Dashboard</a>
                 <a href="/seva">Seva</a>
+                <a href="/my-calendar">My Calendar</a>
+                <a href="/impact">Community Impact</a>
                 <a href="/paath">Paath</a>
                 <a href="/pantry">Pantry</a>
                 <a href="/events">Events</a>
@@ -2946,6 +2948,229 @@ def archive_pantry_need(need_id):
     return redirect(url_for("admin_pantry"))
 
 
+# ============================================================
+# PERSONAL SEVA CALENDAR
+# ============================================================
+
+@app.route("/my-calendar")
+@login_required
+def my_calendar():
+    """Show only the signed-in user's non-rejected Seva signups."""
+    user = current_user()
+    db = get_db()
+    events = db.execute(
+        """
+        SELECT signups.id AS signup_id, signups.status,
+               seva.id AS seva_id, seva.title, seva.date,
+               seva.start_time, seva.end_time, seva.location
+        FROM signups
+        JOIN seva ON seva.id = signups.seva_id
+        WHERE signups.user_id = ? AND signups.status != 'rejected'
+        ORDER BY seva.date ASC, seva.start_time ASC
+        """,
+        (user["id"],)
+    ).fetchall()
+    db.close()
+
+    calendar_data = json.dumps([
+        {
+            "id": int(item["signup_id"]),
+            "title": str(item["title"]),
+            "date": str(item["date"]),
+            "start_time": str(item["start_time"])[:5],
+            "end_time": str(item["end_time"])[:5],
+            "location": str(item["location"]),
+            "status": str(item["status"])
+        }
+        for item in events
+    ], ensure_ascii=False)
+
+    signup_rows = ""
+    for item in events:
+        signup_rows += f"<tr><td>{h(item['title'])}</td><td>{h(item['date'])}</td><td>{h(format_time_label(item['start_time']))} – {h(format_time_label(item['end_time']))}</td><td>{h(item['location'])}</td><td>{h(str(item['status']).title())}</td></tr>"
+    if not signup_rows:
+        signup_rows = '<tr><td colspan="5">You have not signed up for any Sevas yet. Browse <a href="/seva">Seva opportunities</a> to get started.</td></tr>'
+
+    return layout(
+        f"""
+        <div class="container">
+            <h1>🗓️ My Seva Calendar</h1>
+            <p class="muted">A personal schedule of Seva opportunities you have signed up for. Rejected signups are not shown.</p>
+            <div class="card">
+                <div class="calendar-toolbar">
+                    <button type="button" class="dark-button" onclick="moveMyCalendar(-1)">← Previous</button>
+                    <h2 id="my-calendar-title" style="margin:0"></h2>
+                    <button type="button" class="dark-button" onclick="moveMyCalendar(1)">Next →</button>
+                </div>
+                <div class="calendar-grid" id="my-calendar-grid"></div>
+                <p class="small muted">Pending signups are awaiting approval. Approved signups are confirmed.</p>
+            </div>
+            <div class="card">
+                <h2>Upcoming and Past Signups</h2>
+                <div style="overflow-x:auto">
+                    <table>
+                        <tr><th>Seva</th><th>Date</th><th>Time</th><th>Location</th><th>Status</th></tr>
+                        {signup_rows}
+                    </table>
+                </div>
+            </div>
+        </div>
+        <script>
+        const myCalendarEvents = {calendar_data};
+        let myCalendarCursor = new Date();
+        myCalendarCursor.setDate(1);
+        function renderMyCalendar() {{
+            const year = myCalendarCursor.getFullYear();
+            const month = myCalendarCursor.getMonth();
+            document.getElementById("my-calendar-title").textContent =
+                myCalendarCursor.toLocaleDateString(undefined, {{month:"long", year:"numeric"}});
+            const grid = document.getElementById("my-calendar-grid");
+            grid.innerHTML = "";
+            ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].forEach(function(day) {{
+                const header = document.createElement("div");
+                header.className = "calendar-day-header";
+                header.textContent = day;
+                grid.appendChild(header);
+            }});
+            const firstDay = new Date(year, month, 1).getDay();
+            const days = new Date(year, month + 1, 0).getDate();
+            for (let blank = 0; blank < firstDay; blank++) {{
+                const cell = document.createElement("div");
+                cell.className = "calendar-day empty";
+                grid.appendChild(cell);
+            }}
+            for (let day = 1; day <= days; day++) {{
+                const dateKey = year + "-" + String(month + 1).padStart(2,"0") + "-" + String(day).padStart(2,"0");
+                const dayEvents = myCalendarEvents.filter(function(item) {{ return item.date.slice(0,10) === dateKey; }});
+                const cell = document.createElement("div");
+                cell.className = "calendar-day";
+                const number = document.createElement("div");
+                number.className = "calendar-num";
+                number.textContent = day;
+                cell.appendChild(number);
+                dayEvents.forEach(function(item) {{
+                    const event = document.createElement("div");
+                    event.className = "calendar-event";
+                    event.textContent = item.start_time + " " + item.title + " (" + item.status + ")";
+                    event.title = item.title + " • " + item.location;
+                    cell.appendChild(event);
+                }});
+                grid.appendChild(cell);
+            }}
+        }}
+        function moveMyCalendar(delta) {{
+            myCalendarCursor.setMonth(myCalendarCursor.getMonth() + delta);
+            renderMyCalendar();
+        }}
+        renderMyCalendar();
+        </script>
+        """,
+        "My Seva Calendar"
+    )
+
+
+# ============================================================
+# COMMUNITY IMPACT DASHBOARD
+# ============================================================
+
+@app.route("/impact")
+@login_required
+def community_impact():
+    """Show aggregate community metrics without exposing individual records."""
+    db = get_db()
+    try:
+        service_stats = db.execute(
+            """
+            SELECT
+                COALESCE(SUM(signups.hours), 0) AS approved_hours,
+                COUNT(*) AS completed_sevas,
+                COUNT(DISTINCT signups.user_id) AS volunteers
+            FROM signups
+            WHERE signups.status = 'approved'
+            """
+        ).fetchone()
+        opportunity_stats = db.execute(
+            """
+            SELECT COUNT(*) AS total,
+                   COUNT(*) FILTER (WHERE CAST(date AS date) >= CURRENT_DATE) AS upcoming
+            FROM seva
+            """
+        ).fetchone()
+        pantry_stats = db.execute(
+            """
+            SELECT COUNT(*) AS donation_offers,
+                   COUNT(DISTINCT donor_id) AS donors
+            FROM pantry_donations
+            """
+        ).fetchone()
+        monthly = db.execute(
+            """
+            SELECT to_char(date_trunc('month', CAST(seva.date AS date)), 'Mon YYYY') AS month,
+                   COALESCE(SUM(signups.hours), 0) AS hours,
+                   COUNT(*) AS completed
+            FROM signups
+            JOIN seva ON seva.id = signups.seva_id
+            WHERE signups.status = 'approved'
+              AND CAST(seva.date AS date) >= date_trunc('month', CURRENT_DATE) - INTERVAL '5 months'
+              AND CAST(seva.date AS date) < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+            GROUP BY date_trunc('month', CAST(seva.date AS date))
+            ORDER BY date_trunc('month', CAST(seva.date AS date))
+            """
+        ).fetchall()
+    finally:
+        db.close()
+
+    approved_hours = float(service_stats["approved_hours"] or 0)
+    completed_sevas = int(service_stats["completed_sevas"] or 0)
+    volunteers = int(service_stats["volunteers"] or 0)
+    donation_offers = int(pantry_stats["donation_offers"] or 0)
+    donors = int(pantry_stats["donors"] or 0)
+    max_hours = max([float(item["hours"] or 0) for item in monthly] + [1.0])
+
+    month_rows = ""
+    for item in monthly:
+        hours = float(item["hours"] or 0)
+        width = min(100, round(hours / max_hours * 100))
+        month_rows += f"""
+        <div class="impact-month">
+            <div class="progress-label"><span>{h(item["month"])}</span><strong>{round(hours, 2)} hours</strong></div>
+            <div class="progress"><div class="progress-bar" style="width:{width}%"></div></div>
+            <p class="small muted">{int(item["completed"] or 0)} approved Sevas</p>
+        </div>
+        """
+    if not month_rows:
+        month_rows = '<p class="muted">Monthly participation will appear here after the first Seva hours are approved.</p>'
+
+    return layout(
+        f"""
+        <div class="container">
+            <h1>🌍 Community Impact</h1>
+            <p class="muted">A privacy-friendly snapshot of what our community has accomplished together. Only aggregate totals are shown.</p>
+            <div class="grid">
+                <div class="card"><div class="small">VERIFIED SERVICE HOURS</div><div class="stat">{round(approved_hours, 2)}</div></div>
+                <div class="card"><div class="small">APPROVED SEVA SIGNUPS</div><div class="stat">{completed_sevas}</div></div>
+                <div class="card"><div class="small">VOLUNTEERS WHO CONTRIBUTED</div><div class="stat">{volunteers}</div></div>
+                <div class="card"><div class="small">UPCOMING SEVA OPPORTUNITIES</div><div class="stat">{int(opportunity_stats["upcoming"] or 0)}</div></div>
+                <div class="card"><div class="small">PANTRY DONATION OFFERS</div><div class="stat">{donation_offers}</div><p class="small muted">From {donors} contributing donor(s)</p></div>
+                <div class="card"><div class="small">TOTAL SEVA OPPORTUNITIES</div><div class="stat">{int(opportunity_stats["total"] or 0)}</div></div>
+            </div>
+            <div class="card">
+                <h2>📈 Service Over the Last Six Months</h2>
+                <p class="muted">Bars compare approved hours month by month. Only verified hours are counted.</p>
+                {month_rows}
+            </div>
+            <div class="card">
+                <h2>🤝 Keep the Impact Growing</h2>
+                <p>Every hour of service and every pantry contribution helps strengthen the community.</p>
+                <a class="button" href="/seva">Find a Seva</a>
+                <a class="button dark-button" href="/pantry">Visit Pantry</a>
+            </div>
+        </div>
+        """,
+        "Community Impact"
+    )
+
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
@@ -3323,6 +3548,18 @@ def dashboard():
                     </div>
                 </div>
 
+            </div>
+
+            <div class="card">
+                <h2>🗓️ Plan Your Seva</h2>
+                <p class="muted">See only the Sevas you have signed up for in a personal calendar.</p>
+                <a class="button" href="/my-calendar">Open My Seva Calendar</a>
+            </div>
+
+            <div class="card">
+                <h2>🌍 Community Impact</h2>
+                <p class="muted">See the community's verified service hours, volunteer participation, and pantry donation activity.</p>
+                <a class="button" href="/impact">Explore Community Impact</a>
             </div>
 
             <div class="card">
