@@ -3808,7 +3808,7 @@ def seva_bot():
 
     # This bot is intentionally rule-based: it needs no paid API, API key,
     # external AI service, or additional environment variables.
-    lower = re.sub(r"\\s+", " ", message.lower()).strip()
+    lower = re.sub(r"\s+", " ", message.lower()).strip()
     words = set(re.findall(r"[a-z]+", lower))
 
     # Match a named opportunity or a student's own recent signup first.
@@ -3843,7 +3843,7 @@ def seva_bot():
             for item in signups[:8]:
                 lines.append(f"• {item['title']} — {item['date']}: {str(item['status'] or 'status unavailable').replace('_', ' ').title()}.")
             lines.append("For changes or questions about a record, contact an admin. I can't change sign-ups.")
-            reply = "\\n".join(lines)
+            reply = "\n".join(lines)
         else:
             reply = "I couldn't find any Seva sign-ups linked to your account yet. Open the Seva page to browse opportunities."
     elif any(term in lower for term in ("available seva", "upcoming seva", "opportunities", "what seva", "find seva", "list seva", "volunteer opportunities", "open seva")):
@@ -3856,7 +3856,7 @@ def seva_bot():
                 availability = (f"{max(0, capacity - signed_up)} spot(s) left" if capacity > 0 else "no limit shown")
                 lines.append(f"• {item['title']} — {item['date']}, {format_time_label(item['start_time'])}–{format_time_label(item['end_time'])}; {item['location']}; {availability}.")
             lines.append("Open the Seva page to see full descriptions and register. Listings may fill or close.")
-            reply = "\\n".join(lines)
+            reply = "\n".join(lines)
         else:
             reply = "I don't see any upcoming Seva opportunities listed right now. Check the Seva page later or ask an admin."
     elif any(term in lower for term in ("sign up", "signup", "register", "join a seva", "how do i join")):
