@@ -4879,6 +4879,12 @@ def admin():
             </td>
 
             <td>
+                <span class="{"warning" if seva_end_passed(item["date"], item["end_time"]) else "success"}">
+                    {"Closed" if seva_end_passed(item["date"], item["end_time"]) else "Open"}
+                </span>
+            </td>
+
+            <td>
 
                 <form
                     method="POST"
@@ -4909,7 +4915,7 @@ def admin():
 
         seva_rows = """
         <tr>
-            <td colspan="5">
+            <td colspan="6">
                 No seva opportunities created yet.
             </td>
         </tr>
@@ -5291,6 +5297,10 @@ def admin():
 
                             <th>
                                 Capacity
+                            </th>
+
+                            <th>
+                                Status
                             </th>
 
                             <th>
