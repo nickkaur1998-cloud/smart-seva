@@ -3768,7 +3768,7 @@ def seva_bot():
     db = get_db()
     try:
         progress = db.execute(
-            "SELECT COALESCE(SUM(hours), 0) AS hours, COUNT(*) FILTER (WHERE status = 'approved') AS completed FROM signups WHERE user_id = ?",
+            "SELECT COALESCE(SUM(hours) FILTER (WHERE status = 'approved'), 0) AS hours, COUNT(*) FILTER (WHERE status = 'approved') AS completed FROM signups WHERE user_id = ?",
             (user["id"],)
         ).fetchone()
         opportunities = db.execute(
