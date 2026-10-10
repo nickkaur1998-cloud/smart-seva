@@ -1182,6 +1182,8 @@ def layout(content, title="Smart Seva"):
                 <a href="/admin/pantry">Manage Pantry</a>
                 <a href="/admin/events">Manage Events</a>
                 <a href="/events">Events</a>
+                <a href="/my-calendar">My Calendar</a>
+                <a href="/impact">Community Impact</a>
                 <a href="/logout">Logout</a>
             """
         elif user["role"] == "seva_admin":
@@ -1189,6 +1191,8 @@ def layout(content, title="Smart Seva"):
                 <a href="/admin/seva">Manage Seva</a>
                 <a href="/seva">Seva</a>
                 <a href="/events">Events</a>
+                <a href="/my-calendar">My Calendar</a>
+                <a href="/impact">Community Impact</a>
                 <a href="/logout">Logout</a>
             """
         elif user["role"] == "paath_admin":
@@ -1196,6 +1200,8 @@ def layout(content, title="Smart Seva"):
                 <a href="/admin/paath">Manage Paath</a>
                 <a href="/paath">Paath</a>
                 <a href="/events">Events</a>
+                <a href="/my-calendar">My Calendar</a>
+                <a href="/impact">Community Impact</a>
                 <a href="/logout">Logout</a>
             """
         elif user["role"] == "pantry_admin":
@@ -1203,12 +1209,16 @@ def layout(content, title="Smart Seva"):
                 <a href="/admin/pantry">Manage Pantry</a>
                 <a href="/pantry">Pantry</a>
                 <a href="/events">Events</a>
+                <a href="/my-calendar">My Calendar</a>
+                <a href="/impact">Community Impact</a>
                 <a href="/logout">Logout</a>
             """
         elif user["role"] == "events_admin":
             nav = """
                 <a href="/admin/events">Manage Events</a>
                 <a href="/events">Events</a>
+                <a href="/my-calendar">My Calendar</a>
+                <a href="/impact">Community Impact</a>
                 <a href="/logout">Logout</a>
             """
         else:
