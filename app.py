@@ -1181,7 +1181,6 @@ def layout(content, title="Smart Seva"):
                 <a href="/admin/paath">Manage Paath</a>
                 <a href="/admin/pantry">Manage Pantry</a>
                 <a href="/admin/events">Manage Events</a>
-                <a href="/events">Events</a>
                 <a href="/my-calendar">My Calendar</a>
                 <a href="/impact">Community Impact</a>
                 <a href="/logout">Logout</a>
@@ -1216,7 +1215,6 @@ def layout(content, title="Smart Seva"):
         elif user["role"] == "events_admin":
             nav = """
                 <a href="/admin/events">Manage Events</a>
-                <a href="/events">Events</a>
                 <a href="/my-calendar">My Calendar</a>
                 <a href="/impact">Community Impact</a>
                 <a href="/logout">Logout</a>
