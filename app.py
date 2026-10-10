@@ -3834,7 +3834,8 @@ def seva_bot():
             return jsonify({"reply": reply})
 
     # Greetings and general capability questions.
-    if has_any("hello", "hi", "hey", "good morning", "good afternoon", "good evening"):
+    if (lower in ("hi", "hello", "hey", "hiya", "good morning", "good afternoon", "good evening")
+            or lower.startswith(("hi ", "hi,", "hello ", "hello,", "hey ", "hey,", "hiya "))):
         reply = ("Hi! I'm Seva Bot. Ask me things naturally, such as “What can I volunteer for?”, "
                  "“Am I registered?”, “How do I get my hours?”, or “Where is the calendar?”")
     elif has_any("what can you do", "how can you help", "what do you help", "help me", "help"):
@@ -3887,7 +3888,7 @@ def seva_bot():
                  "check out", "attendance", "arrive", "when i get there", "when i arrive",
                  "leave the event", "clock in", "clock out", "record my time", "track my time",
                  "mark attendance", "start my seva", "finish my seva"):
-        reply = ("Open your Dashboard and find the activity under **My Seva**. Use Check In when you arrive. "
+        reply = ("Open your Dashboard and find the activity under My Seva. Use Check In when you arrive. "
                  "Check Out is available after the scheduled end time. The submitted hours then wait for an "
                  "admin to review them; don't check in or out for another student.")
     # Personal approved-hour progress, hour calculations, and certificates.
