@@ -1821,10 +1821,13 @@ def seva():
         filled = int(item["signup_count"] or 0)
         capacity = int(item["max_volunteers"] or 0)
         full = bool(capacity and filled >= capacity)
+        closed = seva_end_passed(item["date"], item["end_time"])
         remaining = max(0, capacity - filled) if capacity else None
         capacity_pct = min(100, round(filled / capacity * 100)) if capacity else 0
 
-        if item["signup_id"]:
+        if closed:
+            action = '<span class="warning">Closed — signup has ended</span>'
+        elif item["signup_id"]:
             action = '<span class="success">✓ Signed Up</span>'
         elif full:
             action = '<span class="warning">Full — no spots remaining</span>'
@@ -2387,7 +2390,7 @@ def signup(seva_id):
 
     seva_item = db.execute(
         """
-        SELECT id, title, max_volunteers,
+        SELECT id, title, date, end_time, max_volunteers,
                (SELECT COUNT(*) FROM signups s2 WHERE s2.seva_id = seva.id AND s2.status != 'rejected') AS signup_count
         FROM seva
         WHERE id = ?
@@ -2399,6 +2402,10 @@ def signup(seva_id):
 
         db.close()
         abort(404)
+
+    if seva_end_passed(seva_item["date"], seva_item["end_time"]):
+        db.close()
+        abort(400, "This Seva is closed because its end time has passed.")
 
     if seva_item["max_volunteers"] and seva_item["signup_count"] >= seva_item["max_volunteers"]:
         db.close()
@@ -4663,7 +4670,7 @@ def admin_seva():
     token = h(csrf_token())
 
     seva_rows = "".join(
-        f"<tr><td>{h(item['title'])}</td><td>{h(item['date'])}</td><td>{h(item['location'])}</td><td>{item['signup_count']}</td><td>{item['max_volunteers'] or 'Unlimited'}</td><td><form method='POST' action='/admin/delete-seva/{item['id']}'><input type='hidden' name='csrf_token' value='{token}'><button class='danger'>Delete</button></form></td></tr>"
+        f"<tr><td>{h(item['title'])}</td><td>{h(item['date'])}</td><td>{h(item['location'])}</td><td>{item['signup_count']}</td><td>{item['max_volunteers'] or 'Unlimited'}</td><td><span class='{'warning' if seva_end_passed(item['date'], item['end_time']) else 'success'}'>{'Closed' if seva_end_passed(item['date'], item['end_time']) else 'Open'}</span></td><td><form method='POST' action='/admin/delete-seva/{item['id']}'><input type='hidden' name='csrf_token' value='{token}'><button class='danger'>Delete</button></form></td></tr>"
         for item in opportunities
     )
 
@@ -4693,7 +4700,7 @@ def admin_seva():
                     <button>Create Seva</button>
                 </form>
             </div>
-            <div class='card'><h2>📋 Seva Opportunities</h2><div style='overflow-x:auto'><table><tr><th>Title</th><th>Date</th><th>Location</th><th>Signups</th><th>Capacity</th><th>Action</th></tr>{seva_rows or '<tr><td colspan="5">No seva opportunities created yet.</td></tr>'}</table></div></div>
+            <div class='card'><h2>📋 Seva Opportunities</h2><div style='overflow-x:auto'><table><tr><th>Title</th><th>Date</th><th>Location</th><th>Signups</th><th>Capacity</th><th>Status</th><th>Action</th></tr>{seva_rows or '<tr><td colspan="7">No seva opportunities created yet.</td></tr>'}</table></div></div>
             <div class='card'><h2>⏳ Hours Awaiting Approval</h2><div style='overflow-x:auto'><table><tr><th>Student</th><th>Seva</th><th>Date</th><th>Hours</th><th>Action</th></tr>{pending_rows or '<tr><td colspan="5">No completed seva is waiting for approval.</td></tr>'}</table></div></div>
         </div>
         """,
@@ -5221,6 +5228,25 @@ def admin():
                                 name="end_time"
                                 required
                             >
+
+                        </div>
+
+                        <div>
+
+                            <label>
+                                Volunteer Spots
+                            </label>
+
+                            <input
+                                type="number"
+                                name="max_volunteers"
+                                min="0"
+                                max="1000"
+                                value="10"
+                                required
+                            >
+
+                            <p class="small">Choose a limit such as 10 or 15. Enter 0 for unlimited signups.</p>
 
                         </div>
 
