@@ -1124,6 +1124,16 @@ iframe.goog-te-banner-frame,
     background: transparent !important;
     box-shadow: none !important;
 }
+
+/* Student-only floating Seva Bot */
+.seva-bot-launcher{position:fixed;right:24px;bottom:24px;z-index:1000;border:1px solid rgba(255,231,161,.55);border-radius:999px;background:linear-gradient(135deg,#d7a83e,#ffe7a1);color:#111827;padding:13px 19px;font-weight:800;box-shadow:0 10px 35px rgba(0,0,0,.42);cursor:pointer}
+.seva-bot-panel{position:fixed;right:24px;bottom:88px;width:min(370px,calc(100vw - 28px));height:min(520px,calc(100vh - 125px));z-index:1001;display:none;flex-direction:column;overflow:hidden;border:1px solid rgba(215,168,62,.55);border-radius:18px;background:#0b1020;box-shadow:0 18px 60px rgba(0,0,0,.6)}
+.seva-bot-panel.open{display:flex}.seva-bot-head{padding:15px 16px;background:linear-gradient(135deg,#111a31,#202b46);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(215,168,62,.25)}
+.seva-bot-head h3{margin:0;color:#ffe7a1;font-size:17px}.seva-bot-head p{margin:4px 0 0;color:#cbd5e1;font-size:12px}.seva-bot-close{background:transparent!important;border:0!important;color:white!important;padding:4px 8px!important;font-size:22px!important}
+.seva-bot-messages{padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;flex:1}.seva-bot-msg{max-width:90%;padding:10px 12px;border-radius:13px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5}.seva-bot-msg.bot{align-self:flex-start;background:#172238;border:1px solid rgba(255,255,255,.08);color:#f1f5f9}.seva-bot-msg.user{align-self:flex-end;background:#d7a83e;color:#111827}.seva-bot-quick{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 10px}.seva-bot-quick button{font-size:11px!important;padding:7px 9px!important;margin:0!important;border-radius:999px!important;background:#18243a!important;border:1px solid rgba(215,168,62,.4)!important;color:#ffe7a1!important}
+.seva-bot-form{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(215,168,62,.22);background:#080d19}.seva-bot-form input{margin:0;min-width:0;flex:1;background:#111a31;color:white;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:10px}.seva-bot-form button{margin:0!important;padding:9px 12px!important}.seva-bot-note{font-size:10px;color:#94a3b8;padding:0 12px 10px}
+@media(max-width:520px){.seva-bot-launcher{right:14px;bottom:14px}.seva-bot-panel{right:10px;bottom:76px;width:calc(100vw - 20px);height:min(70vh,540px)}}
+
 </style>
 """
 
@@ -1241,6 +1251,83 @@ def layout(content, title="Smart Seva"):
             <a href="/register">Register</a>
         """
 
+    seva_bot_widget = ""
+    if user and user["role"] == "student":
+        bot_csrf = h(csrf_token())
+        seva_bot_widget = f"""
+        <button type="button" class="seva-bot-launcher" id="seva-bot-launcher" onclick="toggleSevaBot(true)">💬 Seva Bot</button>
+        <section class="seva-bot-panel" id="seva-bot-panel" role="dialog" aria-label="Seva Bot chat" aria-modal="false">
+            <div class="seva-bot-head">
+                <div><h3>✨ Seva Bot</h3><p>Your Smart Seva helper</p></div>
+                <button type="button" class="seva-bot-close" onclick="toggleSevaBot(false)" aria-label="Close Seva Bot">×</button>
+            </div>
+            <div class="seva-bot-messages" id="seva-bot-messages" aria-live="polite">
+                <div class="seva-bot-msg bot">Hi! I can help you understand sign-ups, check-in/out, approved hours, and finding Seva opportunities. What would you like to know?</div>
+            </div>
+            <div class="seva-bot-quick">
+                <button type="button" onclick="askSevaBot('How do I sign up for Seva?')">How to sign up</button>
+                <button type="button" onclick="askSevaBot('How do my hours get approved?')">Hours approval</button>
+                <button type="button" onclick="askSevaBot('How does check-in and check-out work?')">Check-in/out</button>
+            </div>
+            <form class="seva-bot-form" onsubmit="sendSevaBotMessage(event)">
+                <input id="seva-bot-input" maxlength="1000" autocomplete="off" placeholder="Ask about Smart Seva…" aria-label="Message Seva Bot" required>
+                <button type="submit" id="seva-bot-send">Send</button>
+            </form>
+            <div class="seva-bot-note">Seva Bot can make mistakes. Only admins can approve or change service hours.</div>
+        </section>
+        <script>
+        const sevaBotCsrf = "{bot_csrf}";
+        function toggleSevaBot(open) {{
+            const panel = document.getElementById("seva-bot-panel");
+            panel.classList.toggle("open", open);
+            if (open) document.getElementById("seva-bot-input").focus();
+        }}
+        function addSevaBotMessage(text, who) {{
+            const messages = document.getElementById("seva-bot-messages");
+            const item = document.createElement("div");
+            item.className = "seva-bot-msg " + who;
+            item.textContent = text;
+            messages.appendChild(item);
+            messages.scrollTop = messages.scrollHeight;
+            return item;
+        }}
+        async function askSevaBot(text) {{
+            document.getElementById("seva-bot-input").value = text;
+            await sendSevaBotMessage(null);
+        }}
+        async function sendSevaBotMessage(event) {{
+            if (event) event.preventDefault();
+            const input = document.getElementById("seva-bot-input");
+            const send = document.getElementById("seva-bot-send");
+            const message = input.value.trim();
+            if (!message) return;
+            addSevaBotMessage(message, "user");
+            input.value = "";
+            send.disabled = true;
+            const pending = addSevaBotMessage("Thinking…", "bot");
+            try {{
+                const response = await fetch("/seva-bot", {{
+                    method: "POST",
+                    headers: {{"Content-Type": "application/json", "X-CSRF-Token": sevaBotCsrf}},
+                    body: JSON.stringify({{message}})
+                }});
+                const data = await response.json();
+                pending.textContent = data.reply || "Sorry, I couldn't answer that just now.";
+                if (!response.ok) pending.textContent = data.error || pending.textContent;
+            }} catch (error) {{
+                pending.textContent = "I couldn't connect just now. Please try again.";
+            }} finally {{
+                send.disabled = false;
+                input.focus();
+                document.getElementById("seva-bot-messages").scrollTop = document.getElementById("seva-bot-messages").scrollHeight;
+            }}
+        }}
+        document.addEventListener("keydown", function(event) {{
+            if (event.key === "Escape") toggleSevaBot(false);
+        }});
+        </script>
+        """
+
     return f"""
     <!DOCTYPE html>
 
@@ -1314,6 +1401,8 @@ def layout(content, title="Smart Seva"):
         </script>
 
         {content}
+
+        {seva_bot_widget}
 
         <footer>
             ੴ • Seva • Sangat • Chardi Kala
@@ -3651,6 +3740,125 @@ def dashboard():
         """,
         "Dashboard"
     )
+
+
+
+# ============================================================
+# STUDENT SEVA BOT
+# ============================================================
+
+@app.route("/seva-bot", methods=["POST"])
+@login_required
+def seva_bot():
+    user = current_user()
+    if not user or user["role"] != "student":
+        return jsonify({"error": "Seva Bot is available to student accounts only."}), 403
+
+    supplied_token = request.headers.get("X-CSRF-Token", "")
+    stored_token = session.get("csrf_token", "")
+    if not supplied_token or not stored_token or not secrets.compare_digest(supplied_token, stored_token):
+        return jsonify({"error": "Your security token expired. Refresh the page and try again."}), 400
+
+    payload = request.get_json(silent=True) or {}
+    message = clean(payload.get("message"), 1000)
+    if not message:
+        return jsonify({"error": "Please enter a question."}), 400
+
+    # Provide the model only public opportunity details and aggregate personal progress.
+    db = get_db()
+    try:
+        progress = db.execute(
+            "SELECT COALESCE(SUM(hours), 0) AS hours, COUNT(*) FILTER (WHERE status = 'approved') AS completed FROM signups WHERE user_id = ?",
+            (user["id"],)
+        ).fetchone()
+        opportunities = db.execute(
+            """SELECT title, description, location, date, start_time, end_time, max_volunteers
+               FROM seva WHERE CAST(date AS date) >= CURRENT_DATE
+               ORDER BY date ASC, start_time ASC LIMIT 12"""
+        ).fetchall()
+        signups = db.execute(
+            """SELECT seva.title, seva.date, signups.status, signups.hours
+               FROM signups JOIN seva ON seva.id = signups.seva_id
+               WHERE signups.user_id = ? ORDER BY seva.date DESC LIMIT 10""",
+            (user["id"],)
+        ).fetchall()
+    finally:
+        db.close()
+
+    context = {
+        "approved_hours": round(float(progress["hours"] or 0), 2),
+        "approved_sevas": int(progress["completed"] or 0),
+        "upcoming_opportunities": [
+            {"title": r["title"], "description": r["description"], "location": r["location"],
+             "date": str(r["date"]), "start_time": str(r["start_time"]), "end_time": str(r["end_time"]),
+             "capacity": int(r["max_volunteers"] or 0)}
+            for r in opportunities
+        ],
+        "recent_signups": [
+            {"title": r["title"], "date": str(r["date"]), "status": r["status"],
+             "hours": float(r["hours"] or 0)}
+            for r in signups
+        ],
+    }
+
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if api_key:
+        try:
+            ai_payload = {
+                "model": os.environ.get("SEVA_BOT_MODEL", "gpt-4o-mini"),
+                "messages": [
+                    {"role": "system", "content":
+                     "You are Seva Bot, a friendly and concise helper for the Smart Seva student portal. "
+                     "Answer questions about using the site, signups, check-in/check-out, opportunity details, "
+                     "and progress using the supplied context. Do not claim a signup, approval, or record change "
+                     "has occurred. Only admins approve hours. Never expose another student's information. "
+                     "If asked for something not in context, say you cannot verify it and direct them to an admin. "
+                     "Do not provide medical, legal, or unrelated advice. Context JSON: " + json.dumps(context)},
+                    {"role": "user", "content": message}
+                ],
+                "temperature": 0.3,
+                "max_tokens": 350
+            }
+            req = Request(
+                "https://api.openai.com/v1/chat/completions",
+                data=json.dumps(ai_payload).encode("utf-8"),
+                method="POST",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            )
+            with urlopen(req, timeout=18) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            reply = result["choices"][0]["message"]["content"].strip()
+            return jsonify({"reply": reply})
+        except Exception:
+            app.logger.exception("Seva Bot AI request failed; using built-in help response.")
+
+    lower = message.lower()
+    if any(word in lower for word in ("sign up", "signup", "register for", "join a seva", "opportunities", "available seva")):
+        upcoming = context["upcoming_opportunities"]
+        if upcoming:
+            lines = ["Here are upcoming Seva opportunities currently listed:"]
+            for item in upcoming[:5]:
+                lines.append(f"• {item['title']} — {item['date']}, {format_time_label(item['start_time'])}–{format_time_label(item['end_time'])}; {item['location']}")
+            lines.append("Open Seva from the navigation to view details and sign up. If an opportunity is full or closed, contact an admin.")
+            reply = "\n".join(lines)
+        else:
+            reply = "I don't see any upcoming Seva opportunities listed right now. Check the Seva page again later or ask an admin."
+    elif any(word in lower for word in ("approve", "approval", "hours", "verified", "certificate")):
+        reply = (f"You currently have {context['approved_hours']} approved hours across "
+                 f"{context['approved_sevas']} approved Seva sign-up(s). After you complete a Seva, "
+                 "check out when it is available. An admin reviews and approves submitted hours; "
+                 "Seva Bot cannot approve or change them.")
+    elif any(word in lower for word in ("check in", "check-in", "check out", "checkout", "check-out")):
+        reply = ("Open your Dashboard and find the Seva under My Seva. Use Check In when you arrive. "
+                 "After the scheduled end time, use Check Out. Your hours then wait for admin review.")
+    elif any(word in lower for word in ("paath", "pantry", "event", "calendar", "profile", "notification")):
+        reply = ("Use the navigation menu to open Paath, Pantry, Events, My Calendar, Profile, or Notifications. "
+                 "If a page or signup is not working as expected, contact a Smart Seva admin.")
+    else:
+        reply = ("I can help with finding Seva opportunities, signing up, check-in/check-out, approved hours, "
+                 "certificates, and navigating Smart Seva. Try asking: “How do I sign up for Seva?”")
+    return jsonify({"reply": reply})
+
 
 
 # ============================================================
