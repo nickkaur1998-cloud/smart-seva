@@ -3002,7 +3002,7 @@ def my_calendar():
                     <h2 id="my-calendar-title" style="margin:0"></h2>
                     <button type="button" class="dark-button" onclick="moveMyCalendar(1)">Next →</button>
                 </div>
-                <div class="calendar-grid" id="my-calendar-grid"></div>
+                <div class="calendar" id="my-calendar-grid"></div>
                 <p class="small muted">Pending signups are awaiting approval. Approved signups are confirmed.</p>
             </div>
             <div class="card">
@@ -3028,7 +3028,7 @@ def my_calendar():
             grid.innerHTML = "";
             ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].forEach(function(day) {{
                 const header = document.createElement("div");
-                header.className = "calendar-day-header";
+                header.className = "calendar-head";
                 header.textContent = day;
                 grid.appendChild(header);
             }});
