@@ -3772,9 +3772,13 @@ def seva_bot():
             (user["id"],)
         ).fetchone()
         opportunities = db.execute(
-            """SELECT title, description, location, date, start_time, end_time, max_volunteers
-               FROM seva WHERE CAST(date AS date) >= CURRENT_DATE
-               ORDER BY date ASC, start_time ASC LIMIT 12"""
+            """SELECT seva.title, seva.description, seva.location, seva.date,
+                      seva.start_time, seva.end_time, seva.max_volunteers,
+                      (SELECT COUNT(*) FROM signups s
+                       WHERE s.seva_id = seva.id AND COALESCE(s.status, '') <> 'rejected') AS signed_up
+               FROM seva
+               WHERE CAST(seva.date AS date) >= CURRENT_DATE
+               ORDER BY seva.date ASC, seva.start_time ASC LIMIT 12"""
         ).fetchall()
         signups = db.execute(
             """SELECT seva.title, seva.date, signups.status, signups.hours
@@ -3788,10 +3792,11 @@ def seva_bot():
     context = {
         "approved_hours": round(float(progress["hours"] or 0), 2),
         "approved_sevas": int(progress["completed"] or 0),
+        "goal_hours": float(user["goal_hours"] or 40),
         "upcoming_opportunities": [
             {"title": r["title"], "description": r["description"], "location": r["location"],
              "date": str(r["date"]), "start_time": str(r["start_time"]), "end_time": str(r["end_time"]),
-             "capacity": int(r["max_volunteers"] or 0)}
+             "capacity": int(r["max_volunteers"] or 0), "signed_up": int(r["signed_up"] or 0)}
             for r in opportunities
         ],
         "recent_signups": [
@@ -3801,64 +3806,96 @@ def seva_bot():
         ],
     }
 
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if api_key:
-        try:
-            ai_payload = {
-                "model": os.environ.get("SEVA_BOT_MODEL", "gpt-4o-mini"),
-                "messages": [
-                    {"role": "system", "content":
-                     "You are Seva Bot, a friendly and concise helper for the Smart Seva student portal. "
-                     "Answer questions about using the site, signups, check-in/check-out, opportunity details, "
-                     "and progress using the supplied context. Do not claim a signup, approval, or record change "
-                     "has occurred. Only admins approve hours. Never expose another student's information. "
-                     "If asked for something not in context, say you cannot verify it and direct them to an admin. "
-                     "Do not provide medical, legal, or unrelated advice. Context JSON: " + json.dumps(context)},
-                    {"role": "user", "content": message}
-                ],
-                "temperature": 0.3,
-                "max_tokens": 350
-            }
-            req = Request(
-                "https://api.openai.com/v1/chat/completions",
-                data=json.dumps(ai_payload).encode("utf-8"),
-                method="POST",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-            )
-            with urlopen(req, timeout=18) as response:
-                result = json.loads(response.read().decode("utf-8"))
-            reply = result["choices"][0]["message"]["content"].strip()
-            return jsonify({"reply": reply})
-        except Exception:
-            app.logger.exception("Seva Bot AI request failed; using built-in help response.")
+    # This bot is intentionally rule-based: it needs no paid API, API key,
+    # external AI service, or additional environment variables.
+    lower = re.sub(r"\\s+", " ", message.lower()).strip()
+    words = set(re.findall(r"[a-z]+", lower))
 
-    lower = message.lower()
-    if any(word in lower for word in ("sign up", "signup", "register for", "join a seva", "opportunities", "available seva")):
+    # Match a named opportunity or a student's own recent signup first.
+    for item in context["upcoming_opportunities"]:
+        title = str(item["title"] or "")
+        if title and title.lower() in lower:
+            capacity = int(item["capacity"] or 0)
+            signed_up = int(item.get("signed_up", 0) or 0)
+            if capacity > 0:
+                remaining = max(0, capacity - signed_up)
+                availability = f"{remaining} spot(s) left out of {capacity}."
+                if remaining == 0:
+                    availability = f"This listing has reached its {capacity}-volunteer limit."
+            else:
+                availability = "The listing has no volunteer limit shown."
+            reply = (
+                f"{title} is listed for {item['date']} from "
+                f"{format_time_label(item['start_time'])} to {format_time_label(item['end_time'])} "
+                f"at {item['location']}. {availability} "
+                "Open the Seva page to review the full details and sign up. "
+                "I can't register you or reserve a spot from this chat."
+            )
+            return jsonify({"reply": reply})
+
+    if any(term in lower for term in ("hello", "hi seva", "hey seva", "good morning", "good afternoon")):
+        reply = ("Hi! I'm the free Smart Seva helper. Ask me about available opportunities, "
+                 "your sign-ups, approved hours, check-in/check-out, or where to find a page.")
+    elif any(term in lower for term in ("my signup", "my sign-up", "my seva", "registered", "sign-up status", "signup status", "did i sign up", "what did i sign up")):
+        signups = context["recent_signups"]
+        if signups:
+            lines = ["Here are your recent Seva sign-ups:"]
+            for item in signups[:8]:
+                lines.append(f"• {item['title']} — {item['date']}: {str(item['status'] or 'status unavailable').replace('_', ' ').title()}.")
+            lines.append("For changes or questions about a record, contact an admin. I can't change sign-ups.")
+            reply = "\\n".join(lines)
+        else:
+            reply = "I couldn't find any Seva sign-ups linked to your account yet. Open the Seva page to browse opportunities."
+    elif any(term in lower for term in ("available seva", "upcoming seva", "opportunities", "what seva", "find seva", "list seva", "volunteer opportunities", "open seva")):
         upcoming = context["upcoming_opportunities"]
         if upcoming:
-            lines = ["Here are upcoming Seva opportunities currently listed:"]
-            for item in upcoming[:5]:
-                lines.append(f"• {item['title']} — {item['date']}, {format_time_label(item['start_time'])}–{format_time_label(item['end_time'])}; {item['location']}")
-            lines.append("Open Seva from the navigation to view details and sign up. If an opportunity is full or closed, contact an admin.")
-            reply = "\n".join(lines)
+            lines = ["Upcoming Seva listings:"]
+            for item in upcoming[:8]:
+                capacity = int(item["capacity"] or 0)
+                signed_up = int(item.get("signed_up", 0) or 0)
+                availability = (f"{max(0, capacity - signed_up)} spot(s) left" if capacity > 0 else "no limit shown")
+                lines.append(f"• {item['title']} — {item['date']}, {format_time_label(item['start_time'])}–{format_time_label(item['end_time'])}; {item['location']}; {availability}.")
+            lines.append("Open the Seva page to see full descriptions and register. Listings may fill or close.")
+            reply = "\\n".join(lines)
         else:
-            reply = "I don't see any upcoming Seva opportunities listed right now. Check the Seva page again later or ask an admin."
-    elif any(word in lower for word in ("approve", "approval", "hours", "verified", "certificate")):
-        reply = (f"You currently have {context['approved_hours']} approved hours across "
-                 f"{context['approved_sevas']} approved Seva sign-up(s). After you complete a Seva, "
-                 "check out when it is available. An admin reviews and approves submitted hours; "
-                 "Seva Bot cannot approve or change them.")
-    elif any(word in lower for word in ("check in", "check-in", "check out", "checkout", "check-out")):
+            reply = "I don't see any upcoming Seva opportunities listed right now. Check the Seva page later or ask an admin."
+    elif any(term in lower for term in ("sign up", "signup", "register", "join a seva", "how do i join")):
+        reply = ("To sign up, open **Seva** in the navigation, choose an opportunity, read its details, "
+                 "and use its sign-up option. If it is full, closed, or you can't register, contact an admin. "
+                 "I can explain the steps, but I can't submit the sign-up for you.")
+    elif any(term in lower for term in ("check in", "check-in", "check out", "check-out", "checkout", "attendance")):
         reply = ("Open your Dashboard and find the Seva under My Seva. Use Check In when you arrive. "
-                 "After the scheduled end time, use Check Out. Your hours then wait for admin review.")
-    elif any(word in lower for word in ("paath", "pantry", "event", "calendar", "profile", "notification")):
-        reply = ("Use the navigation menu to open Paath, Pantry, Events, My Calendar, Profile, or Notifications. "
-                 "If a page or signup is not working as expected, contact a Smart Seva admin.")
+                 "Check Out becomes available after the scheduled end time. Your submitted hours then wait "
+                 "for an admin to review them.")
+    elif any(term in lower for term in ("certificate", "goal hours", "hours", "approved", "approval", "verified", "progress", "how many")):
+        goal = float(context.get("goal_hours", 40) or 40)
+        approved = float(context["approved_hours"])
+        remaining = max(0, round(goal - approved, 2))
+        reply = (f"Your account currently has {approved:g} approved hour(s) across "
+                 f"{context['approved_sevas']} approved Seva sign-up(s). Your current goal is {goal:g} hours; "
+                 f"{remaining:g} more approved hour(s) are needed to reach it. After you check out, an admin "
+                 "must approve the hours. I can't approve hours or issue/change a certificate.")
+    elif any(term in lower for term in ("cancel", "withdraw", "remove my signup", "change my signup")):
+        reply = ("I can't cancel or change a registration from chat. Open your Dashboard and check your My Seva "
+                 "section for available actions. If you don't see the right option, contact an admin.")
+    elif any(term in lower for term in ("paath", "pantry", "event", "calendar", "profile", "notification")):
+        pages = []
+        for term, page in (("paath", "Paath"), ("pantry", "Pantry"), ("event", "Events"),
+                           ("calendar", "My Calendar"), ("profile", "Profile"),
+                           ("notification", "Notifications")):
+            if term in lower:
+                pages.append(page)
+        reply = ("You can open " + ", ".join(pages) + " from the navigation menu. "
+                 "If the page or a registration is not working, contact a Smart Seva admin.")
+    elif any(term in lower for term in ("who are you", "what can you do", "help", "commands")):
+        reply = ("I'm a free, built-in Smart Seva helper. I can show upcoming listings, explain sign-up and "
+                 "check-in/check-out steps, list your recent sign-ups, and report your approved-hour progress. "
+                 "I can't perform actions or change records.")
     else:
-        reply = ("I can help with finding Seva opportunities, signing up, check-in/check-out, approved hours, "
-                 "certificates, and navigating Smart Seva. Try asking: “How do I sign up for Seva?”")
+        reply = ("I can help with upcoming Seva listings, your sign-up status, approved hours, check-in/check-out, "
+                 "and site navigation. Try “Show upcoming Seva” or “How many approved hours do I have?” "
+                 "I'm a free built-in helper, so I may not understand every question.")
     return jsonify({"reply": reply})
-
 
 
 # ============================================================
