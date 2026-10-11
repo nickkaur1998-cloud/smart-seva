@@ -4193,6 +4193,7 @@ def checkin(signup_id):
         )
     )
 
+    log_activity(db, user, "checked in", "signup", signup_id, {"seva_id": signup["seva_id"]})
     db.commit()
     db.close()
 
@@ -4285,6 +4286,7 @@ def checkout(signup_id):
         )
     )
 
+    log_activity(db, user, "checked out", "signup", signup_id, {"hours": hours})
     db.commit()
     db.close()
 
