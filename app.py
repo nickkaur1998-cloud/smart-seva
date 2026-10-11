@@ -2847,7 +2847,7 @@ def pantry_needs():
         FROM pantry_needs
         LEFT JOIN pantry_need_signups
             ON pantry_need_signups.need_id = pantry_needs.id
-            AND pantry_need_signups.status = 'committed'
+            AND pantry_need_signups.status IN ('committed', 'delivered', 'received')
         LEFT JOIN pantry_need_signups AS own_signup
             ON own_signup.need_id = pantry_needs.id
             AND own_signup.user_id = ?
@@ -2953,7 +2953,7 @@ def pantry_signup(need_id):
         """
         SELECT COALESCE(SUM(quantity), 0) AS total
         FROM pantry_need_signups
-        WHERE need_id = ? AND status = 'committed'
+        WHERE need_id = ? AND status IN ('committed', 'delivered', 'received')
         """,
         (need_id,)
     ).fetchone()["total"]
@@ -2992,6 +2992,12 @@ def pantry_signup(need_id):
             (need_id, user["id"], converted_quantity, utc_now())
         )
         db.commit()
+        log_db = get_db()
+        try:
+            log_activity(log_db, user, "pledged pantry item", "pantry_need", need_id, {"quantity": format_quantity(converted_quantity), "unit": requested_unit})
+            log_db.commit()
+        finally:
+            log_db.close()
     except IntegrityError:
         db.close()
         abort(400, "You have already signed up for this ingredient.")
@@ -3011,7 +3017,7 @@ def admin_pantry():
         FROM pantry_needs
         LEFT JOIN pantry_need_signups
             ON pantry_need_signups.need_id = pantry_needs.id
-            AND pantry_need_signups.status = 'committed'
+            AND pantry_need_signups.status IN ('committed', 'delivered', 'received')
         GROUP BY pantry_needs.id
         ORDER BY pantry_needs.status, pantry_needs.needed_by ASC, pantry_needs.id DESC
         """
@@ -3040,10 +3046,16 @@ def admin_pantry():
         <tr><td>{h(need["ingredient"])}</td><td><strong>{format_quantity(remaining)} {h(display_unit)} still needed</strong></td><td>{h(need["needed_by"] or "-")}</td><td>{h(need["status"].title())}</td><td>{action}</td></tr>
         """
 
-    signup_rows = "".join(
-        f"<tr><td>{h(item['student_name'])}<br><span class='small'>{h(item['student_email'])}</span></td><td>{h(item['ingredient'])}</td><td>{format_quantity(item['quantity'])} {h(canonical_unit(item['unit']))}</td><td>{h(item['status'].title())}</td></tr>"
-        for item in signups
-    )
+    signup_rows = ""
+    for item in signups:
+        status = item["status"] or "committed"
+        if status == "committed":
+            action_html = f"<form method='POST' action='/admin/pantry/signup/{item['id']}/delivered'><input type='hidden' name='csrf_token' value='{token}'><button>Mark Delivered</button></form>"
+        elif status == "delivered":
+            action_html = f"<form method='POST' action='/admin/pantry/signup/{item['id']}/received'><input type='hidden' name='csrf_token' value='{token}'><button>Confirm Received</button></form>"
+        else:
+            action_html = "<span class='success'>✓ Complete</span>"
+        signup_rows += f"<tr><td>{h(item['student_name'])}<br><span class='small'>{h(item['student_email'])}</span></td><td>{h(item['ingredient'])}</td><td>{format_quantity(item['quantity'])} {h(canonical_unit(item['unit']))}</td><td>{h(status.title())}</td><td>{action_html}</td></tr>"
 
     return layout(
         f"""
@@ -3075,7 +3087,7 @@ def admin_pantry():
                 </form>
             </div>
             <div class="card"><h2>Published needs</h2><div style="overflow-x:auto"><table><tr><th>Ingredient</th><th>Remaining</th><th>Bring by</th><th>Status</th><th>Action</th></tr>{need_rows or '<tr><td colspan="5">No ingredient needs published yet.</td></tr>'}</table></div></div>
-            <div class="card"><h2>Student signups</h2><div style="overflow-x:auto"><table><tr><th>Student</th><th>Ingredient</th><th>Quantity</th><th>Status</th></tr>{signup_rows or '<tr><td colspan="4">No student signups yet.</td></tr>'}</table></div></div>
+            <div class="card"><h2>Pantry fulfillment tracker</h2><p class="muted">Track pledged ingredients from commitment to delivery and receipt.</p><div style="overflow-x:auto"><table><tr><th>Student</th><th>Ingredient</th><th>Quantity</th><th>Status</th><th>Update</th></tr>{signup_rows or '<tr><td colspan="5">No student signups yet.</td></tr>'}</table></div></div>
         </div>
         """,
         "Manage Pantry Needs"
@@ -3114,6 +3126,7 @@ def create_pantry_need():
         """,
         (ingredient, quantity_needed, unit, details, needed_by, user["id"], utc_now())
     )
+    log_activity(db, user, "created pantry need", "pantry_need", None, {"ingredient": ingredient, "quantity": format_quantity(quantity_needed), "unit": unit})
     db.commit()
     db.close()
     return redirect(url_for("admin_pantry"))
@@ -3122,10 +3135,42 @@ def create_pantry_need():
 @app.route("/admin/pantry/archive/<int:need_id>", methods=["POST"])
 @pantry_admin_required
 def archive_pantry_need(need_id):
-
     validate_csrf()
+    user = current_user()
     db = get_db()
     db.execute("UPDATE pantry_needs SET status = 'archived' WHERE id = ?", (need_id,))
+    log_activity(db, user, "archived pantry need", "pantry_need", need_id)
+    db.commit()
+    db.close()
+    return redirect(url_for("admin_pantry"))
+
+
+@app.route("/admin/pantry/signup/<int:signup_id>/<status>", methods=["POST"])
+@pantry_admin_required
+def update_pantry_fulfillment(signup_id, status):
+    validate_csrf()
+    if status not in {"delivered", "received"}:
+        abort(400, "Invalid fulfillment status.")
+    user = current_user()
+    db = get_db()
+    item = db.execute(
+        "SELECT id, need_id, status FROM pantry_need_signups WHERE id = ?",
+        (signup_id,)
+    ).fetchone()
+    if not item:
+        db.close()
+        abort(404)
+    if status == "delivered" and item["status"] != "committed":
+        db.close()
+        abort(400, "Only committed pantry pledges can be marked delivered.")
+    if status == "received" and item["status"] != "delivered":
+        db.close()
+        abort(400, "Only delivered pantry pledges can be confirmed received.")
+    db.execute(
+        "UPDATE pantry_need_signups SET status = ?, received_at = CASE WHEN ? = 'received' THEN NOW() ELSE received_at END WHERE id = ?",
+        (status, status, signup_id)
+    )
+    log_activity(db, user, "updated pantry fulfillment", "pantry_signup", signup_id, {"from": item["status"], "to": status, "need_id": item["need_id"]})
     db.commit()
     db.close()
     return redirect(url_for("admin_pantry"))
