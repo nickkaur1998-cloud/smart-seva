@@ -1685,8 +1685,6 @@ def layout(content, title="Smart Seva"):
                 button.textContent = "ਪੰਜਾਬੀ ✓";
             }}
             const keys = Object.keys(dictionary).sort((a, b) => b.length - a.length);
-            const escaped = keys.map(key => key.replace(/[.*+?^[object Object]()|[\]\\]/g, "\\$&"));
-            const matcher = new RegExp(escaped.join("|"), "g");
             const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {{
                 acceptNode(node) {{
                     const parent = node.parentElement;
@@ -1699,7 +1697,9 @@ def layout(content, title="Smart Seva"):
             }});
             let node;
             while ((node = walker.nextNode())) {{
-                node.nodeValue = node.nodeValue.replace(matcher, phrase => dictionary[phrase]);
+                keys.forEach(key => {{
+                    node.nodeValue = node.nodeValue.split(key).join(dictionary[key]);
+                }});
             }}
             const labels = {{
                 "Translate this page to Punjabi": "ਇਸ ਪੰਨੇ ਦਾ ਪੰਜਾਬੀ ਵਿੱਚ ਅਨੁਵਾਦ ਕਰੋ",
