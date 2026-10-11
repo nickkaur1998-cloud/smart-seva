@@ -741,6 +741,72 @@ nav a:hover {
     text-shadow: 0 0 18px rgba(215,168,62,.5);
 }
 
+.nav-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.nav-dropdown > summary {
+    list-style: none;
+    cursor: pointer;
+    color: #dce8ef;
+    padding: 9px 12px;
+    border: 1px solid rgba(215,168,62,.22);
+    border-radius: 9px;
+    background: rgba(255,255,255,.035);
+    white-space: nowrap;
+    user-select: none;
+}
+
+.nav-dropdown > summary::-webkit-details-marker {
+    display: none;
+}
+
+.nav-dropdown > summary::after {
+    content: " ▾";
+    color: var(--sun);
+    font-size: 11px;
+}
+
+.nav-dropdown[open] > summary,
+.nav-dropdown > summary:hover,
+.nav-dropdown > summary:focus-visible {
+    color: var(--sun);
+    border-color: rgba(215,168,62,.6);
+    outline-offset: 3px;
+}
+
+.nav-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    min-width: 190px;
+    z-index: 500;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px;
+    border: 1px solid rgba(215,168,62,.3);
+    border-radius: 12px;
+    background: rgba(7,12,27,.98);
+    box-shadow: 0 14px 35px rgba(0,0,0,.42);
+    backdrop-filter: blur(18px);
+}
+
+.nav-dropdown-menu a {
+    display: block;
+    margin: 0 !important;
+    padding: 10px 12px;
+    border-radius: 7px;
+    white-space: nowrap;
+}
+
+.nav-dropdown-menu a:hover,
+.nav-dropdown-menu a:focus-visible {
+    background: rgba(215,168,62,.12);
+    outline-offset: 2px;
+}
+
 .container {
     position: relative;
     z-index: 1;
@@ -1241,47 +1307,112 @@ def layout(content, title="Smart Seva"):
         if user["role"] == "admin":
             nav = """
                 <a href="/admin">Dashboard</a>
-                <a href="/admin/seva">Manage Seva</a>
-                <a href="/admin/paath">Manage Paath</a>
-                <a href="/admin/pantry">Manage Pantry</a>
-                <a href="/admin/events">Manage Events</a>
-                <a href="/admin/activity-log">Activity Log</a>
-                <a href="/my-calendar">My Calendar</a>
-                <a href="/impact">Community Impact</a>
+                <details class="nav-dropdown">
+                    <summary>Manage</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/admin/seva">Manage Seva</a>
+                        <a href="/admin/paath">Manage Paath</a>
+                        <a href="/admin/pantry">Manage Pantry</a>
+                        <a href="/admin/events">Manage Events</a>
+                    </div>
+                </details>
+                <details class="nav-dropdown">
+                    <summary>Community</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/admin/activity-log">Activity Log</a>
+                        <a href="/my-calendar">My Calendar</a>
+                        <a href="/impact">Community Impact</a>
+                    </div>
+                </details>
                 <a href="/logout">Logout</a>
             """
         elif user["role"] == "seva_admin":
             nav = """
-                <a href="/admin/seva">Manage Seva</a>
-                <a href="/seva">Seva</a>
-                <a href="/events">Events</a>
-                <a href="/my-calendar">My Calendar</a>
-                <a href="/impact">Community Impact</a>
+                <details class="nav-dropdown">
+                    <summary>Manage</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/admin/seva">Manage Seva</a>
+                    </div>
+                </details>
+                <details class="nav-dropdown">
+                    <summary>Explore</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/seva">Seva</a>
+                        <a href="/events">Events</a>
+                    </div>
+                </details>
+                <details class="nav-dropdown">
+                    <summary>Community</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/my-calendar">My Calendar</a>
+                        <a href="/impact">Community Impact</a>
+                    </div>
+                </details>
                 <a href="/logout">Logout</a>
             """
         elif user["role"] == "paath_admin":
             nav = """
-                <a href="/admin/paath">Manage Paath</a>
-                <a href="/paath">Paath</a>
-                <a href="/events">Events</a>
-                <a href="/my-calendar">My Calendar</a>
-                <a href="/impact">Community Impact</a>
+                <details class="nav-dropdown">
+                    <summary>Manage</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/admin/paath">Manage Paath</a>
+                    </div>
+                </details>
+                <details class="nav-dropdown">
+                    <summary>Explore</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/paath">Paath</a>
+                        <a href="/events">Events</a>
+                    </div>
+                </details>
+                <details class="nav-dropdown">
+                    <summary>Community</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/my-calendar">My Calendar</a>
+                        <a href="/impact">Community Impact</a>
+                    </div>
+                </details>
                 <a href="/logout">Logout</a>
             """
         elif user["role"] == "pantry_admin":
             nav = """
-                <a href="/admin/pantry">Manage Pantry</a>
-                <a href="/pantry">Pantry</a>
-                <a href="/events">Events</a>
-                <a href="/my-calendar">My Calendar</a>
-                <a href="/impact">Community Impact</a>
+                <details class="nav-dropdown">
+                    <summary>Manage</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/admin/pantry">Manage Pantry</a>
+                    </div>
+                </details>
+                <details class="nav-dropdown">
+                    <summary>Explore</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/pantry">Pantry</a>
+                        <a href="/events">Events</a>
+                    </div>
+                </details>
+                <details class="nav-dropdown">
+                    <summary>Community</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/my-calendar">My Calendar</a>
+                        <a href="/impact">Community Impact</a>
+                    </div>
+                </details>
                 <a href="/logout">Logout</a>
             """
         elif user["role"] == "events_admin":
             nav = """
-                <a href="/admin/events">Manage Events</a>
-                <a href="/my-calendar">My Calendar</a>
-                <a href="/impact">Community Impact</a>
+                <details class="nav-dropdown">
+                    <summary>Manage</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/admin/events">Manage Events</a>
+                    </div>
+                </details>
+                <details class="nav-dropdown">
+                    <summary>Community</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/my-calendar">My Calendar</a>
+                        <a href="/impact">Community Impact</a>
+                    </div>
+                </details>
                 <a href="/logout">Logout</a>
             """
         else:
