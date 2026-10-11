@@ -1599,7 +1599,7 @@ def layout(content, title="Smart Seva"):
             }} catch (e) {{}}
         }})();
         function showEnglish() {{ window.location.reload(); }}
-        function translatePageToPunjabi() {{
+        async function translatePageToPunjabi() {{
             // Offline dictionary: no API key, account, network request, or billing.
             // This translates known interface phrases; user-written descriptions
             // and other text not in the dictionary remain in English.
@@ -1892,31 +1892,86 @@ def layout(content, title="Smart Seva"):
                 button.disabled = true;
                 button.textContent = "ਪੰਜਾਬੀ ✓";
             }}
-            const keys = Object.keys(dictionary).sort((a, b) => b.length - a.length);
             const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {{
                 acceptNode(node) {{
                     const parent = node.parentElement;
-                    if (!parent || parent.closest("script, style, noscript, textarea, input, select, option")) {{
+                    if (!parent || parent.closest("script, style, noscript, textarea, input, select, option, .translate-button")) {{
                         return NodeFilter.FILTER_REJECT;
                     }}
                     if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
                     return NodeFilter.FILTER_ACCEPT;
                 }}
             }});
+            const jobs = [];
             let node;
             while ((node = walker.nextNode())) {{
-                // HTML templates often insert line breaks/indentation inside
-                // text nodes. Normalize internal whitespace so full phrases
-                // can match instead of translating only isolated words.
                 const original = node.nodeValue;
                 const leading = (original.match(/^\\s*/) || [""])[0];
                 const trailing = (original.match(/\\s*$/) || [""])[0];
                 const visible = original.trim().replace(/\\s+/g, " ");
-                // Translate a complete text node only. Replacing short words
-                // inside a sentence created the English/Punjabi mixtures.
-                if (dictionary[visible]) {{
-                    node.nodeValue = leading + dictionary[visible] + trailing;
+                if (!visible || /[\\u0A00-\\u0A7F]/.test(visible)) continue;
+                jobs.push({{ node, leading, trailing, visible }});
+            }}
+
+            // Try Google's public web-translation endpoint without an API key.
+            // This is not the official Cloud Translation API and may be rate-limited
+            // or changed by Google; the local dictionary remains the fallback.
+            let failed = false;
+            async function translateOne(job) {{
+                if (dictionary[job.visible]) {{
+                    job.node.nodeValue = job.leading + dictionary[job.visible] + job.trailing;
+                    return;
                 }}
+                try {{
+                    const url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pa&dt=t&q=" + encodeURIComponent(job.visible);
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error("Google translation returned HTTP " + response.status);
+                    const data = await response.json();
+                    const translated = Array.isArray(data[0])
+                        ? data[0].map(part => Array.isArray(part) ? (part[0] || "") : "").join("")
+                        : "";
+                    if (translated) job.node.nodeValue = job.leading + translated + job.trailing;
+                    else if (dictionary[job.visible]) job.node.nodeValue = job.leading + dictionary[job.visible] + job.trailing;
+                    else failed = true;
+                }} catch (error) {{
+                    failed = true;
+                    if (dictionary[job.visible]) job.node.nodeValue = job.leading + dictionary[job.visible] + job.trailing;
+                }}
+            }}
+
+            // Small batches avoid flooding the free public endpoint.
+            for (let i = 0; i < jobs.length; i += 4) {{
+                await Promise.all(jobs.slice(i, i + 4).map(translateOne));
+                if (i + 4 < jobs.length) await new Promise(resolve => setTimeout(resolve, 120));
+            }}
+
+            // Translate common placeholder and accessibility text too.
+            const attributeNames = ["placeholder", "title", "aria-label", "alt"];
+            for (const attributeName of attributeNames) {{
+                const elements = Array.from(document.querySelectorAll("[" + attributeName + "]"));
+                for (let i = 0; i < elements.length; i += 4) {{
+                    await Promise.all(elements.slice(i, i + 4).map(async element => {{
+                        const value = element.getAttribute(attributeName);
+                        if (!value || /[\\u0A00-\\u0A7F]/.test(value)) return;
+                        if (dictionary[value]) {{
+                            element.setAttribute(attributeName, dictionary[value]);
+                            return;
+                        }}
+                        try {{
+                            const url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pa&dt=t&q=" + encodeURIComponent(value);
+                            const response = await fetch(url);
+                            if (!response.ok) throw new Error("Translation request failed");
+                            const data = await response.json();
+                            const translated = Array.isArray(data[0])
+                                ? data[0].map(part => Array.isArray(part) ? (part[0] || "") : "").join("")
+                                : "";
+                            if (translated) element.setAttribute(attributeName, translated);
+                        }} catch (error) {{ failed = true; }}
+                    }}));
+                }}
+            }
+            if (failed) {{
+                console.warn("Some text could not be translated by the public Google endpoint; dictionary translations were used where available.");
             }}
             const labels = {{
                 "Translate this page to Punjabi": "ਇਸ ਪੰਨੇ ਦਾ ਪੰਜਾਬੀ ਵਿੱਚ ਅਨੁਵਾਦ ਕਰੋ",
