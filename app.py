@@ -1557,6 +1557,98 @@ footer { padding: 34px 20px; color: #8f9bb3; font-size: 13px; letter-spacing: .0
     .feature-card:hover { transform: none; }
 }
 
+
+/* Whole-site page system: shared visual language across student and admin screens. */
+main { position: relative; z-index: 1; min-height: 62vh; }
+main > .container,
+main > .page-shell,
+main > .dashboard-container {
+    width: min(1240px, calc(100% - 44px));
+    margin: 0 auto;
+    padding: clamp(28px, 4vw, 54px) 0 64px;
+}
+main .container > h1,
+main .page-shell > h1,
+main .dashboard-container > h1 {
+    margin: 0 0 12px;
+    font-size: clamp(30px, 4vw, 43px);
+    line-height: 1.16;
+    letter-spacing: -.035em;
+    color: #fff;
+}
+main h2 { color: #fff4d0; letter-spacing: -.018em; }
+main h3 { color: #f8e7b4; }
+main p, main li { color: #d2d9e8; }
+main .muted, main .subtitle, main .help-text { color: #9eabc4; }
+main .card,
+main .panel,
+main .stat-card,
+main .section-card {
+    background: linear-gradient(145deg, rgba(17,29,54,.92), rgba(7,14,30,.92));
+    border: 1px solid rgba(190,204,229,.14);
+    border-radius: 18px;
+    box-shadow: 0 14px 36px rgba(0,0,0,.16);
+}
+main .card { padding: clamp(18px, 2.5vw, 28px); }
+main .card h2:first-child, main .card h3:first-child { margin-top: 0; }
+main .grid { gap: 18px; }
+main .stat {
+    color: #ffe7a1;
+    font-size: clamp(30px, 4vw, 42px);
+    font-weight: 800;
+    line-height: 1.15;
+}
+main .button, main button, main input[type="submit"] {
+    border-radius: 10px;
+    font-weight: 700;
+    transition: transform .16s ease, border-color .16s ease, background .16s ease;
+}
+main .button:hover, main button:hover, main input[type="submit"]:hover {
+    transform: translateY(-1px);
+}
+main input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]),
+main select, main textarea {
+    width: 100%;
+    max-width: 100%;
+    min-height: 44px;
+    padding: 11px 13px;
+    color: #f7f8fc;
+    background: rgba(3,9,23,.78);
+    border: 1px solid rgba(190,204,229,.22);
+    border-radius: 10px;
+}
+main input:focus, main select:focus, main textarea:focus {
+    border-color: rgba(255,231,161,.75);
+    box-shadow: 0 0 0 3px rgba(215,168,62,.12);
+    outline: none;
+}
+main select option { background: #101a30; color: #fff; }
+main label { display: inline-block; margin-bottom: 6px; color: #e7ebf5; font-weight: 600; }
+main form { min-width: 0; }
+main table { border-collapse: separate; border-spacing: 0; overflow: hidden; border-radius: 12px; }
+main th { background: rgba(215,168,62,.10); color: #ffe7a1; font-weight: 800; }
+main td, main th { padding: 13px 14px; border-bottom: 1px solid rgba(190,204,229,.12); }
+main tbody tr { background: rgba(11,19,37,.42); }
+main tbody tr:hover { background: rgba(215,168,62,.055); }
+main a:not(.button):not(.calendar-event) { text-underline-offset: 3px; }
+main .badge { white-space: nowrap; }
+main hr { border: 0; border-top: 1px solid rgba(190,204,229,.14); margin: 24px 0; }
+main .empty-state { border: 1px dashed rgba(215,168,62,.3); border-radius: 16px; background: rgba(13,22,43,.55); }
+footer { position: relative; z-index: 1; border-top: 1px solid rgba(215,168,62,.14); background: rgba(3,8,20,.38); }
+@media (max-width: 700px) {
+    main > .container, main > .page-shell, main > .dashboard-container {
+        width: calc(100% - 28px);
+        padding: 28px 0 44px;
+    }
+    main .card { padding: 18px; }
+    main .grid { gap: 12px; }
+    main td, main th { padding: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    main .button, main button, main input[type="submit"] { transition: none; }
+    main .button:hover, main button:hover, main input[type="submit"]:hover { transform: none; }
+}
+
 </style>
 """
 
