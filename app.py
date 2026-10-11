@@ -215,6 +215,33 @@ def init_db():
             )
         """)
         db.execute("CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications(user_id, is_read, created_at DESC)")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS seva_waitlist (
+                id BIGSERIAL PRIMARY KEY,
+                seva_id BIGINT NOT NULL REFERENCES seva(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+                status TEXT NOT NULL DEFAULT 'waiting',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (seva_id, user_id)
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS seva_waitlist_next_idx ON seva_waitlist(seva_id, status, created_at, id)")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS activity_log (
+                id BIGSERIAL PRIMARY KEY,
+                actor_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+                actor_name TEXT NOT NULL,
+                actor_email TEXT,
+                action TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT,
+                details TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS activity_log_created_idx ON activity_log(created_at DESC, id DESC)")
+        db.execute("ALTER TABLE pantry_need_signups ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'committed'")
+        db.execute("ALTER TABLE pantry_need_signups ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ")
         db.commit()
 
         role_emails = {
@@ -486,6 +513,23 @@ def notify_user(user_id, title, message, link=None):
         db.commit()
     finally:
         db.close()
+
+
+def log_activity(db, actor, action, entity_type, entity_id=None, details=None):
+    """Append an audit event; never store passwords or payment secrets."""
+    actor_id = actor["id"] if actor else None
+    actor_name = clean(actor.get("name") if actor else "System", 200) or "System"
+    actor_email = clean(actor.get("email") if actor else "", 320) or None
+    db.execute(
+        """
+        INSERT INTO activity_log
+            (actor_id, actor_name, actor_email, action, entity_type, entity_id, details)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (actor_id, actor_name, actor_email, clean(action, 100),
+         clean(entity_type, 100), str(entity_id) if entity_id is not None else None,
+         json.dumps(details or {}, ensure_ascii=False))
+    )
 
 
 def seva_end_passed(date_value, end_time_value):
@@ -1134,6 +1178,16 @@ iframe.goog-te-banner-frame,
 .seva-bot-form{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(215,168,62,.22);background:#080d19}.seva-bot-form input{margin:0;min-width:0;flex:1;background:#111a31;color:white;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:10px}.seva-bot-form button{margin:0!important;padding:9px 12px!important}.seva-bot-note{font-size:10px;color:#94a3b8;padding:0 12px 10px}
 @media(max-width:520px){.seva-bot-launcher{right:14px;bottom:14px}.seva-bot-panel{right:10px;bottom:76px;width:calc(100vw - 20px);height:min(70vh,540px)}}
 
+
+/* Accessibility: visible focus, reduced motion, scalable text, and skip navigation. */
+:focus-visible { outline: 3px solid #ffe7a1 !important; outline-offset: 3px; }
+.skip-link { position:absolute; left:12px; top:-100px; z-index:10000; padding:12px 16px; background:#ffe7a1; color:#111; border-radius:8px; }
+.skip-link:focus { top:12px; }
+body.large-text { font-size: 1.12rem; }
+body.large-text p, body.large-text label, body.large-text input, body.large-text select, body.large-text textarea, body.large-text button, body.large-text td, body.large-text th { font-size: 1.08em; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
 </style>
 """
 
@@ -1191,6 +1245,7 @@ def layout(content, title="Smart Seva"):
                 <a href="/admin/paath">Manage Paath</a>
                 <a href="/admin/pantry">Manage Pantry</a>
                 <a href="/admin/events">Manage Events</a>
+                <a href="/admin/activity-log">Activity Log</a>
                 <a href="/my-calendar">My Calendar</a>
                 <a href="/impact">Community Impact</a>
                 <a href="/logout">Logout</a>
@@ -1356,7 +1411,8 @@ def layout(content, title="Smart Seva"):
             <span class="ik-constellation ik-three">ੴ</span>
         </div>
 
-        <nav>
+        <a class="skip-link" href="#main-content">Skip to main content</a>
+        <nav aria-label="Main navigation">
 
             <div class="logo">
                 <span class="logo-mark" aria-label="Ik Onkar">ੴ</span>
@@ -1368,7 +1424,9 @@ def layout(content, title="Smart Seva"):
             <div class="nav-actions">
                 {nav}
                 <button type="button" class="qr-menu-button" onclick="openQrModal()" aria-label="Show QR code for Smart Seva">QR Code</button>
-                <button type="button" class="translate-button dark-button" onclick="translatePageToPunjabi()">ਪੰਜਾਬੀ</button>
+                <button type="button" class="dark-button" id="text-size-toggle" onclick="toggleTextSize()" aria-pressed="false" aria-label="Toggle larger text">A+ Text</button>
+                <button type="button" class="translate-button dark-button" onclick="translatePageToPunjabi()" aria-label="Translate this page to Punjabi">ਪੰਜਾਬੀ</button>
+                <button type="button" class="dark-button" onclick="showEnglish()" aria-label="Return to English">English</button>
             </div>
 
         </nav>
@@ -1400,7 +1458,9 @@ def layout(content, title="Smart Seva"):
         }});
         </script>
 
+        <main id="main-content" tabindex="-1">
         {content}
+        </main>
 
         {seva_bot_widget}
 
@@ -1408,6 +1468,25 @@ def layout(content, title="Smart Seva"):
             ੴ • Seva • Sangat • Chardi Kala
         </footer>
         <script>
+        function toggleTextSize() {{
+            const enabled = document.body.classList.toggle("large-text");
+            const button = document.getElementById("text-size-toggle");
+            if (button) {{
+                button.setAttribute("aria-pressed", enabled ? "true" : "false");
+                button.textContent = enabled ? "A− Text" : "A+ Text";
+            }}
+            try {{ localStorage.setItem("smart-seva-large-text", enabled ? "1" : "0"); }} catch (e) {{}}
+        }}
+        (function restoreTextSize() {{
+            try {{
+                if (localStorage.getItem("smart-seva-large-text") === "1") {{
+                    document.body.classList.add("large-text");
+                    const button = document.getElementById("text-size-toggle");
+                    if (button) {{ button.setAttribute("aria-pressed", "true"); button.textContent = "A− Text"; }}
+                }}
+            }} catch (e) {{}}
+        }})();
+        function showEnglish() {{ window.location.reload(); }}
         async function translatePageToPunjabi() {{
             const button = document.querySelector(".translate-button");
             if (button) {{
