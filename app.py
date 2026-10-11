@@ -1558,6 +1558,71 @@ footer { padding: 34px 20px; color: #8f9bb3; font-size: 13px; letter-spacing: .0
 }
 
 
+/* Personalized student dashboard and admin command center. */
+.dashboard-welcome-strip {
+    display:flex; align-items:center; justify-content:space-between; gap:24px;
+    margin:24px 0 20px; padding:clamp(22px,3vw,34px);
+    border:1px solid rgba(215,168,62,.27); border-radius:20px;
+    background:linear-gradient(115deg,rgba(215,168,62,.12),rgba(17,29,54,.88) 55%,rgba(8,15,31,.9));
+}
+.dashboard-welcome-strip h2 { margin:8px 0; font-size:clamp(22px,3vw,30px); }
+.dashboard-welcome-strip p { margin:0; max-width:650px; }
+.eyebrow { color:#d8b65e; font-size:10px; font-weight:850; letter-spacing:.16em; }
+.dashboard-quick-actions,.admin-quick-actions { display:flex; flex-wrap:wrap; align-items:center; gap:9px; }
+.dashboard-stat-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.dashboard-action-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:18px 0 24px; }
+.dashboard-action-card { display:flex; align-items:center; gap:12px; min-width:0; padding:17px; text-decoration:none; border:1px solid rgba(190,204,229,.13); border-radius:15px; background:rgba(13,22,43,.78); transition:border-color .18s ease, transform .18s ease; }
+.dashboard-action-card:hover { border-color:rgba(215,168,62,.55); transform:translateY(-2px); }
+.dashboard-action-card > span:nth-child(2) { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.dashboard-action-card strong { color:#f7f8fc; }
+.dashboard-action-card small { color:#9eabc4; line-height:1.45; }
+.dashboard-action-icon { display:grid; place-items:center; width:39px; height:39px; flex:0 0 39px; border-radius:12px; color:#ffe7a1; background:rgba(215,168,62,.12); font-size:20px; }
+.dashboard-action-arrow { margin-left:auto; color:#ffe7a1; font-size:20px; }
+.section-heading-row { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
+.section-heading-row h2 { margin:5px 0 0; }
+.section-heading-row p { margin:7px 0 0; }
+.section-heading-row > a { flex:0 0 auto; color:#ffe7a1; font-weight:750; text-decoration:none; }
+.recommended-seva-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px; }
+.recommended-seva-card { display:flex; flex-direction:column; min-width:0; padding:18px; border:1px solid rgba(190,204,229,.13); border-radius:15px; background:rgba(3,9,23,.45); }
+.recommended-seva-date { color:#ffe7a1; font-size:12px; font-weight:750; }
+.recommended-seva-card h3 { margin:10px 0 5px; }
+.recommended-seva-card p { font-size:13px; margin:5px 0; }
+.recommended-seva-footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-top:auto; padding-top:14px; }
+.recommended-seva-footer > span { color:#b7c3d8; font-size:12px; }
+.admin-quick-actions { margin:22px 0; }
+.admin-overview-grid { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:17px; margin-bottom:20px; }
+.admin-overview-panel { min-width:0; }
+.admin-upcoming-list,.admin-activity-list { display:flex; flex-direction:column; }
+.admin-upcoming-item { display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid rgba(190,204,229,.1); }
+.admin-upcoming-item:last-child,.admin-activity-item:last-child { border-bottom:0; }
+.admin-upcoming-date { display:flex; flex-direction:column; align-items:center; justify-content:center; flex:0 0 54px; min-height:54px; border:1px solid rgba(215,168,62,.22); border-radius:12px; background:rgba(215,168,62,.08); color:#ffe7a1; }
+.admin-upcoming-date strong { font-size:15px; }
+.admin-upcoming-date small,.admin-upcoming-capacity small { font-size:10px; color:#9eabc4; }
+.admin-upcoming-main { display:flex; flex:1; flex-direction:column; gap:4px; min-width:0; }
+.admin-upcoming-main strong { color:#f7f8fc; }
+.admin-upcoming-main span { color:#9eabc4; font-size:12px; }
+.admin-upcoming-capacity { text-align:right; color:#ffe7a1; font-size:13px; white-space:nowrap; }
+.admin-upcoming-capacity small { display:block; }
+.admin-activity-item { display:flex; align-items:flex-start; gap:10px; padding:12px 0; border-bottom:1px solid rgba(190,204,229,.1); }
+.admin-activity-dot { flex:0 0 8px; width:8px; height:8px; margin-top:7px; border-radius:50%; background:#d7a83e; box-shadow:0 0 12px rgba(215,168,62,.3); }
+.admin-activity-item > div { flex:1; min-width:0; }
+.admin-activity-item strong { color:#f7f8fc; font-size:13px; }
+.admin-activity-item p { margin:4px 0 0; font-size:12px; }
+.admin-activity-item time { color:#8e9bb3; font-size:10px; white-space:nowrap; }
+@media(max-width:900px) {
+    .dashboard-stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .recommended-seva-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .admin-overview-grid { grid-template-columns:1fr; }
+}
+@media(max-width:650px) {
+    .dashboard-welcome-strip { flex-direction:column; align-items:flex-start; }
+    .dashboard-action-grid,.recommended-seva-grid { grid-template-columns:1fr; }
+    .dashboard-stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .section-heading-row { align-items:flex-start; }
+    .admin-upcoming-item { gap:8px; }
+    .admin-activity-item time { max-width:85px; white-space:normal; text-align:right; }
+}
+
 /* Whole-site page system: shared visual language across student and admin screens. */
 main { position: relative; z-index: 1; min-height: 62vh; }
 main > .container,
@@ -4351,6 +4416,40 @@ def dashboard():
         (user["id"],)
     ).fetchone()
 
+    pending_review_row = db.execute(
+        """
+        SELECT COUNT(*) AS count
+        FROM signups
+        WHERE user_id = ? AND status = 'pending' AND check_out IS NOT NULL
+        """,
+        (user["id"],)
+    ).fetchone()
+    pending_review_count = int(pending_review_row["count"] or 0)
+
+    recommended_sevas = db.execute(
+        """
+        SELECT seva.id, seva.title, seva.description, seva.location, seva.date,
+               seva.start_time, seva.end_time, seva.max_volunteers,
+               (SELECT COUNT(*) FROM signups s
+                WHERE s.seva_id = seva.id AND s.status <> 'rejected') AS signup_count
+        FROM seva
+        WHERE CAST(seva.date AS date) >= CURRENT_DATE
+          AND (
+              COALESCE(seva.max_volunteers, 0) = 0
+              OR (SELECT COUNT(*) FROM signups s
+                  WHERE s.seva_id = seva.id AND s.status <> 'rejected') < seva.max_volunteers
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM signups mine
+              WHERE mine.seva_id = seva.id AND mine.user_id = ?
+                AND mine.status <> 'rejected'
+          )
+        ORDER BY CAST(seva.date AS date), seva.start_time
+        LIMIT 3
+        """,
+        (user["id"],)
+    ).fetchall()
+
     badges = milestone_badges(total, completed_count)
     badges_html = " ".join(f"<span class='button' style='display:inline-block;margin:4px'>{h(b)}</span>" for b in badges) or "<span class='muted'>Complete your first Seva to earn a milestone.</span>"
 
@@ -4406,6 +4505,21 @@ def dashboard():
             </div>
         </div>
         """
+
+    recommended_html = ""
+    for rec in recommended_sevas:
+        spots = "Unlimited spots" if not rec["max_volunteers"] else f"{max(0, int(rec['max_volunteers']) - int(rec['signup_count'] or 0))} spots left"
+        recommended_html += f"""
+        <article class="recommended-seva-card">
+            <div class="recommended-seva-date">{h(rec["date"])} · {h(format_time_label(rec["start_time"]))}</div>
+            <h3>{h(rec["title"])}</h3>
+            <p>📍 {h(rec["location"])}</p>
+            <p>{h((rec["description"] or "")[:150])}</p>
+            <div class="recommended-seva-footer"><span>{h(spots)}</span><a class="button" href="/seva">View opportunity</a></div>
+        </article>
+        """
+    if not recommended_html:
+        recommended_html = """<div class="empty-state"><h3>You're all caught up</h3><p>No new upcoming opportunities match right now. Check again soon.</p><a class="button" href="/seva">Browse all Seva</a></div>"""
 
     certificate_button = ""
 
@@ -4608,10 +4722,15 @@ def dashboard():
             </h1>
 
             <p class="muted">
-                Your Smart Seva dashboard.
+                Your Smart Seva dashboard. Here's your progress and the next best steps.
             </p>
 
-            <div class="grid">
+            <div class="dashboard-welcome-strip">
+                <div><span class="eyebrow">YOUR SERVICE JOURNEY</span><h2>Every act of Seva makes a difference.</h2><p>Track verified hours, stay on top of sign-ups, and find your next opportunity.</p></div>
+                <div class="dashboard-quick-actions"><a class="button" href="/seva">Find Seva</a><a class="button dark-button" href="/my-calendar">My Calendar</a></div>
+            </div>
+
+            <div class="grid dashboard-stat-grid">
 
                 <div class="card">
                     <div class="small">
@@ -4643,6 +4762,17 @@ def dashboard():
                     </div>
                 </div>
 
+            </div>
+
+            <div class="dashboard-action-grid">
+                <a class="dashboard-action-card" href="/seva"><span class="dashboard-action-icon">✦</span><span><strong>Find a Seva</strong><small>Discover open volunteer opportunities</small></span><span class="dashboard-action-arrow">→</span></a>
+                <a class="dashboard-action-card" href="/my-calendar"><span class="dashboard-action-icon">▦</span><span><strong>My Calendar</strong><small>Review your upcoming commitments</small></span><span class="dashboard-action-arrow">→</span></a>
+                <a class="dashboard-action-card" href="/notifications"><span class="dashboard-action-icon">♧</span><span><strong>Notifications</strong><small>{pending_review_count} item(s) awaiting hour review</small></span><span class="dashboard-action-arrow">→</span></a>
+            </div>
+
+            <div class="card dashboard-recommendations">
+                <div class="section-heading-row"><div><span class="eyebrow">A GOOD NEXT STEP</span><h2>✨ Opportunities for You</h2><p class="muted">Upcoming Sevas with space available that you haven't joined yet.</p></div><a href="/seva">Browse all →</a></div>
+                <div class="recommended-seva-grid">{recommended_html}</div>
             </div>
 
             <div class="card">
@@ -6143,6 +6273,27 @@ def admin():
         """
     ).fetchall()
 
+    upcoming_admin_sevas = db.execute(
+        """
+        SELECT id, title, date, start_time, end_time, location, max_volunteers,
+               (SELECT COUNT(*) FROM signups s
+                WHERE s.seva_id = seva.id AND s.status <> 'rejected') AS signup_count
+        FROM seva
+        WHERE CAST(date AS date) >= CURRENT_DATE
+        ORDER BY CAST(date AS date), start_time
+        LIMIT 5
+        """
+    ).fetchall()
+
+    recent_admin_activity = db.execute(
+        """
+        SELECT actor_name, action, entity_type, created_at
+        FROM activity_log
+        ORDER BY created_at DESC, id DESC
+        LIMIT 6
+        """
+    ).fetchall()
+
     # --------------------------------------------------------
     # All students
     # --------------------------------------------------------
@@ -6177,6 +6328,16 @@ def admin():
     db.close()
 
     token = h(csrf_token())
+
+    admin_upcoming_html = "".join(
+        f"""<div class="admin-upcoming-item"><div class="admin-upcoming-date"><strong>{h(str(item["date"])[5:])}</strong><small>{h(format_time_label(item["start_time"]))}</small></div><div class="admin-upcoming-main"><strong>{h(item["title"])}</strong><span>{h(item["location"])}</span></div><div class="admin-upcoming-capacity">{int(item["signup_count"] or 0)} / {int(item["max_volunteers"] or 0) if item["max_volunteers"] else "∞"}<small>signed up</small></div></div>"""
+        for item in upcoming_admin_sevas
+    ) or '<p class="muted">No upcoming Sevas yet. Create an opportunity to get started.</p>'
+
+    admin_activity_html = "".join(
+        f"""<div class="admin-activity-item"><span class="admin-activity-dot"></span><div><strong>{h(item["action"])}</strong><p>{h(item["actor_name"])} · {h(item["entity_type"])}</p></div><time>{h(str(item["created_at"])[:16])}</time></div>"""
+        for item in recent_admin_activity
+    ) or '<p class="muted">No activity has been recorded yet.</p>'
 
     # --------------------------------------------------------
     # Opportunity HTML
@@ -6469,11 +6630,29 @@ def admin():
             </div>
 
 
+            <div class="admin-quick-actions">
+                <a class="button" href="#create-seva">＋ Create Seva</a>
+                <a class="button dark-button" href="#pending-approvals">Review approvals ({pending_count})</a>
+                <a class="button dark-button" href="/admin/activity-log">View activity log</a>
+                <a class="button dark-button" href="/impact">Community impact</a>
+            </div>
+
+            <div class="admin-overview-grid">
+                <section class="card admin-overview-panel">
+                    <div class="section-heading-row"><div><span class="eyebrow">COMING UP</span><h2>Upcoming Seva</h2></div><a href="/admin/seva">Manage all →</a></div>
+                    <div class="admin-upcoming-list">{admin_upcoming_html}</div>
+                </section>
+                <section class="card admin-overview-panel">
+                    <div class="section-heading-row"><div><span class="eyebrow">LATEST CHANGES</span><h2>Recent Activity</h2></div><a href="/admin/activity-log">Full log →</a></div>
+                    <div class="admin-activity-list">{admin_activity_html}</div>
+                </section>
+            </div>
+
             <!-- =========================================
                  CREATE SEVA
                  ========================================= -->
 
-            <div class="card">
+            <div class="card" id="create-seva">
 
                 <h2>
                     ➕ Create Seva Opportunity
@@ -6652,7 +6831,7 @@ def admin():
                  APPROVALS
                  ========================================= -->
 
-            <div class="card">
+            <div class="card" id="pending-approvals">
 
                 <h2>
                     ⏳ Hours Awaiting Approval
