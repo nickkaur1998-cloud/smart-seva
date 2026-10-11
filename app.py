@@ -4,6 +4,7 @@ import json
 import re
 import qrcode
 from urllib.request import Request, urlopen
+from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
@@ -1661,11 +1662,7 @@ def layout(content, title="Smart Seva"):
 @app.route("/api/translate", methods=["POST"])
 @login_required
 def translate_api():
-    """Translate page text through Google Cloud Translation Basic (v2)."""
-    api_key = os.environ.get("GOOGLE_TRANSLATE_API_KEY", "").strip()
-    if not api_key:
-        return jsonify({"error": "Translation API is not configured."}), 503
-
+    """Translate page text into Punjabi using MyMemory's free translation endpoint."""
     payload = request.get_json(silent=True) or {}
     texts = payload.get("texts", [])
     target = clean(payload.get("target", "pa"), 10)
@@ -1681,41 +1678,83 @@ def translate_api():
     if sum(len(item) for item in texts) > 30000:
         return jsonify({"error": "Page is too large to translate at once."}), 400
 
-    req = Request(
-        "https://translation.googleapis.com/language/translate/v2?key=" + api_key,
-        data=json.dumps({
-            "q": texts,
-            "source": "en",
-            "target": "pa",
-            "format": "text"
-        }).encode("utf-8"),
-        method="POST",
-        headers={
-            "Content-Type": "application/json; charset=utf-8",
-            "Accept": "application/json"
-        }
-    )
+    # MyMemory's public endpoint accepts short segments without an API key.
+    # Group short text nodes to reduce request count; use a marker to separate
+    # translations, with a per-segment fallback if the marker is changed.
+    marker = "ZXQSEVA000ZXQ"
+    pieces = []
+    for index, item in enumerate(texts):
+        remaining = item.strip()
+        while remaining:
+            if len(remaining) <= 350:
+                piece, remaining = remaining, ""
+            else:
+                split_at = remaining.rfind(" ", 0, 350)
+                if split_at < 100:
+                    split_at = 350
+                piece, remaining = remaining[:split_at], remaining[split_at:].lstrip()
+            pieces.append((index, piece))
+
+    groups = []
+    current = []
+    current_length = 0
+    for item in pieces:
+        piece_length = len(item[1])
+        added_length = piece_length + (len(marker) if current else 0)
+        if current and current_length + added_length > 420:
+            groups.append(current)
+            current = []
+            current_length = 0
+            added_length = piece_length
+        current.append(item)
+        current_length += added_length
+    if current:
+        groups.append(current)
+
+    translated_pieces = [[] for _ in texts]
+
+    def request_translation(text):
+        query = urlencode({"q": text, "langpair": "en|pa-IN"})
+        req = Request(
+            "https://api.mymemory.translated.net/get?" + query,
+            headers={"Accept": "application/json", "User-Agent": "SmartSeva/1.0"}
+        )
+        with urlopen(req, timeout=15) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        if str(result.get("responseStatus", "")) != "200":
+            details = result.get("responseDetails") or "Translation service returned an error."
+            raise ValueError(str(details))
+        translated = result.get("responseData", {}).get("translatedText", "")
+        if not translated:
+            raise ValueError("Translation service returned an empty translation.")
+        return translated
 
     try:
-        with urlopen(req, timeout=20) as response:
-            result = json.loads(response.read().decode("utf-8"))
-        translations = [
-            item.get("translatedText", "")
-            for item in result.get("data", {}).get("translations", [])
-        ]
+        for group in groups:
+            joined = (" " + marker + " ").join(piece for _, piece in group)
+            try:
+                batch_result = request_translation(joined)
+                split_results = batch_result.split(marker)
+                if len(split_results) != len(group):
+                    raise ValueError("Translation separator was not preserved.")
+                for (index, _), translated in zip(group, split_results):
+                    translated_pieces[index].append(translated.strip())
+            except (ValueError, HTTPError, URLError, TimeoutError):
+                # Retry separately if the translation service changes/removes
+                # our separator, so text from different page elements won't mix.
+                for index, piece in group:
+                    translated_pieces[index].append(request_translation(piece).strip())
+
+        translations = [" ".join(part for part in parts if part) for parts in translated_pieces]
         return jsonify({"translations": translations})
     except HTTPError as error:
-        try:
-            details = json.loads(error.read().decode("utf-8"))
-        except Exception:
-            details = {}
-        message = details.get("error", {}).get("message", "Translation service request failed.")
-        return jsonify({"error": message}), 502
+        return jsonify({"error": "The free translation service returned HTTP " + str(error.code) + "."}), 502
     except (URLError, TimeoutError):
-        return jsonify({"error": "Translation service could not be reached."}), 502
+        return jsonify({"error": "The free translation service could not be reached. Please try again."}), 502
+    except (ValueError, KeyError, TypeError) as error:
+        return jsonify({"error": "Punjabi translation failed: " + str(error)[:250]}), 502
 
 
-# ============================================================
 # HOME
 # ============================================================
 
