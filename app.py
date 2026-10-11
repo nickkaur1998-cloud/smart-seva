@@ -1638,7 +1638,7 @@ def layout(content, title="Smart Seva"):
                 }}
             }} catch (error) {{
                 console.error(error);
-                alert("Punjabi translation is temporarily unavailable.");
+                alert(error.message || "Punjabi translation is temporarily unavailable.");
             }} finally {{
                 if (button) {{
                     button.disabled = false;
