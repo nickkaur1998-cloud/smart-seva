@@ -1939,7 +1939,7 @@ def seva():
     sort = clean(request.args.get("sort", "soonest"), 20)
 
     where = []
-    params = [user["id"]]
+    params = [user["id"], user["id"]]
 
     if q:
         where.append("(lower(seva.title) LIKE lower(?) OR lower(seva.description) LIKE lower(?) OR lower(seva.location) LIKE lower(?))")
@@ -1969,9 +1969,11 @@ def seva():
         f"""
         SELECT seva.*,
                signups.id AS signup_id,
-               (SELECT COUNT(*) FROM signups s2 WHERE s2.seva_id = seva.id AND s2.status != 'rejected') AS signup_count
+               seva_waitlist.status AS waitlist_status,
+               (SELECT COUNT(*) FROM signups s2 WHERE s2.seva_id = seva.id AND s2.status NOT IN ('rejected', 'cancelled')) AS signup_count
         FROM seva
         LEFT JOIN signups ON seva.id = signups.seva_id AND signups.user_id = ?
+        LEFT JOIN seva_waitlist ON seva_waitlist.seva_id = seva.id AND seva_waitlist.user_id = ? AND seva_waitlist.status = 'waiting'
         {where_sql}
         ORDER BY {order_sql}
         """,
@@ -1998,7 +2000,13 @@ def seva():
         elif item["signup_id"]:
             action = '<span class="success">✓ Signed Up</span>'
         elif full:
-            action = '<span class="warning">Full — no spots remaining</span>'
+            if item["waitlist_status"] == "waiting":
+                action = '<span class="warning" role="status">⏳ You are on the waitlist</span>'
+            else:
+                action = f"""<form method="POST" action="/signup/{item["id"]}">
+                    <input type="hidden" name="csrf_token" value="{token}">
+                    <button aria-label="Join waitlist for {h(item["title"])}">Join Waitlist</button>
+                </form>"""
         else:
             action = f"""
             <form method="POST" action="/signup/{item["id"]}">
@@ -2576,8 +2584,16 @@ def signup(seva_id):
         abort(400, "This Seva is closed because its end time has passed.")
 
     if seva_item["max_volunteers"] and seva_item["signup_count"] >= seva_item["max_volunteers"]:
-        db.close()
-        abort(400, "This Seva is full.")
+        try:
+            db.execute("""INSERT INTO seva_waitlist (seva_id, user_id, status, created_at)
+                          VALUES (?, ?, 'waiting', ?) ON CONFLICT (seva_id, user_id) DO NOTHING""",
+                       (seva_id, user["id"], utc_now()))
+            log_activity(db, user, "joined waitlist", "seva", seva_id, {"title": seva_item["title"]})
+            db.commit()
+        finally:
+            db.close()
+        notify_user(user["id"], "Added to Seva waitlist", f"You are on the waitlist for {seva_item['title']}. If a spot opens, Smart Seva will notify you.", "/seva")
+        return redirect(url_for("seva"))
 
     try:
 
@@ -2599,6 +2615,8 @@ def signup(seva_id):
             )
         )
 
+        log_activity(db, user, "signed up", "seva", seva_id, {"title": seva_item["title"]})
+        db.execute("UPDATE seva_waitlist SET status = 'promoted' WHERE seva_id = ? AND user_id = ? AND status = 'waiting'", (seva_id, user["id"]))
         db.commit()
         notify_user(user["id"], "Seva signup confirmed", f"You signed up for {seva_item['title']}.", "/dashboard")
 
@@ -5118,6 +5136,55 @@ def admin_seva():
         """,
         "Manage Seva"
     )
+
+
+# ============================================================
+# CENTRAL ADMIN ACTIVITY LOG
+# ============================================================
+
+@app.route("/admin/activity-log")
+@admin_required
+def admin_activity_log():
+    """Central-admin-only record of important actions across Smart Seva."""
+    try:
+        page = max(1, min(100000, int(request.args.get("page", "1"))))
+    except (TypeError, ValueError):
+        page = 1
+    page_size = 100
+    offset = (page - 1) * page_size
+    db = get_db()
+    total = int(db.execute("SELECT COUNT(*) AS count FROM activity_log").fetchone()["count"] or 0)
+    entries = db.execute(
+        """
+        SELECT id, actor_name, actor_email, action, entity_type, entity_id, details, created_at
+        FROM activity_log ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
+        """, (page_size, offset)
+    ).fetchall()
+    db.close()
+    rows = ""
+    for entry in entries:
+        try:
+            details = json.loads(entry["details"] or "{}")
+        except (TypeError, ValueError):
+            details = {}
+        detail_text = "; ".join("{}: {}".format(clean(k, 80), clean(v, 240)) for k, v in details.items())
+        rows += (
+            f"<tr><td>{h(entry['created_at'])}</td>"
+            f"<td>{h(entry['actor_name'])}<br><span class='small'>{h(entry['actor_email'] or '')}</span></td>"
+            f"<td>{h(entry['action'])}</td><td>{h(entry['entity_type'])} {h(entry['entity_id'] or '')}</td>"
+            f"<td>{h(detail_text)}</td></tr>"
+        )
+    if not rows:
+        rows = "<tr><td colspan='5'>No activity has been recorded yet. New actions will appear here.</td></tr>"
+    prev = f'<a class="button dark-button" href="/admin/activity-log?page={page-1}">← Newer</a>' if page > 1 else ""
+    nxt = f'<a class="button dark-button" href="/admin/activity-log?page={page+1}">Older →</a>' if offset + page_size < total else ""
+    return layout(f"""
+      <div class="container"><h1>Central Admin · Activity Log</h1>
+      <p class="muted">Timestamped record of who performed important actions and what changed. Restricted to central admins.</p>
+      <div class="card"><p><strong>{total}</strong> recorded actions · Page {page}</p>
+      <div style="overflow-x:auto"><table><thead><tr><th>When (UTC)</th><th>Who</th><th>Action</th><th>Item</th><th>Details</th></tr></thead>
+      <tbody>{rows}</tbody></table></div><div class="filter-actions">{prev}{nxt}</div></div></div>
+      """, "Central Admin Activity Log")
 
 
 # ============================================================
