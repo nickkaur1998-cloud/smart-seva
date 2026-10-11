@@ -2630,6 +2630,51 @@ def signup(seva_id):
     )
 
 
+@app.route("/cancel-signup/<int:signup_id>", methods=["POST"])
+@login_required
+def cancel_signup(signup_id):
+    validate_csrf()
+    user = current_user()
+    if user["role"] != "student":
+        abort(403)
+    db = get_db()
+    signup = db.execute("""
+        SELECT signups.id, signups.seva_id, signups.user_id, signups.status,
+               signups.check_in, seva.title, seva.date, seva.max_volunteers
+        FROM signups JOIN seva ON seva.id = signups.seva_id
+        WHERE signups.id = ? AND signups.user_id = ?
+    """, (signup_id, user["id"])).fetchone()
+    if not signup:
+        db.close()
+        abort(404)
+    if signup["status"] != "pending" or signup["check_in"] or str(signup["date"]) < datetime.now(APP_TIMEZONE).date().isoformat():
+        db.close()
+        abort(400, "Only future signups that have not been checked in can be cancelled.")
+    db.execute("DELETE FROM signups WHERE id = ?", (signup_id,))
+    log_activity(db, user, "cancelled signup", "seva", signup["seva_id"], {"title": signup["title"]})
+    promoted_user_id = None
+    if signup["max_volunteers"]:
+        occupied = int(db.execute("SELECT COUNT(*) AS count FROM signups WHERE seva_id = ? AND status NOT IN ('rejected', 'cancelled')",
+                                  (signup["seva_id"],)).fetchone()["count"] or 0)
+        if occupied < int(signup["max_volunteers"]):
+            waiting = db.execute("""SELECT * FROM seva_waitlist WHERE seva_id = ? AND status = 'waiting'
+                                    ORDER BY created_at ASC, id ASC LIMIT 1 FOR UPDATE""",
+                                  (signup["seva_id"],)).fetchone()
+            if waiting:
+                db.execute("INSERT INTO signups (user_id, seva_id, status, created_at) VALUES (?, ?, 'pending', ?)",
+                           (waiting["user_id"], signup["seva_id"], utc_now()))
+                db.execute("UPDATE seva_waitlist SET status = 'promoted' WHERE id = ?", (waiting["id"],))
+                log_activity(db, user, "promoted waitlisted volunteer", "seva", signup["seva_id"],
+                             {"waitlist_user_id": str(waiting["user_id"]), "title": signup["title"]})
+                promoted_user_id = waiting["user_id"]
+    db.commit()
+    db.close()
+    if promoted_user_id:
+        notify_user(promoted_user_id, "A Seva spot opened for you",
+                    f"You have been moved from the waitlist into the signup list for {signup['title']}.", "/dashboard")
+    return redirect(url_for("dashboard"))
+
+
 # ============================================================
 # STUDENT DASHBOARD
 # ============================================================
@@ -3658,6 +3703,14 @@ def dashboard():
 
             if not item["check_in"]:
 
+                cancel_form = ""
+                if str(item["date"]) >= datetime.now(APP_TIMEZONE).date().isoformat():
+                    cancel_form = f"""
+                    <form method="POST" action="/cancel-signup/{item["id"]}" onsubmit="return confirm('Cancel this Seva signup?');">
+                        <input type="hidden" name="csrf_token" value="{token}">
+                        <button type="submit" class="danger">Cancel Signup</button>
+                    </form>
+                    """
                 action = f"""
                 <form
                     method="POST"
@@ -3675,6 +3728,7 @@ def dashboard():
                     </button>
 
                 </form>
+                {cancel_form}
                 """
 
             elif not item["check_out"]:
@@ -6021,6 +6075,8 @@ def create_seva():
         )
     )
 
+    log_activity(db, user, "created Seva opportunity", "seva", None,
+                 {"title": title, "date": date, "location": location, "capacity": max_volunteers})
     db.commit()
     db.close()
 
@@ -6043,15 +6099,11 @@ def delete_seva(seva_id):
     validate_csrf()
 
     db = get_db()
-
-    db.execute(
-        """
-        DELETE FROM seva
-        WHERE id = ?
-        """,
-        (seva_id,)
-    )
-
+    user = current_user()
+    old_item = db.execute("SELECT title FROM seva WHERE id = ?", (seva_id,)).fetchone()
+    db.execute("DELETE FROM seva WHERE id = ?", (seva_id,))
+    log_activity(db, user, "deleted Seva opportunity", "seva", seva_id,
+                 {"title": old_item["title"] if old_item else "unknown"})
     db.commit()
     db.close()
 
@@ -6099,17 +6151,10 @@ def approve_signup(signup_id):
             "Student has not checked out yet."
         )
 
-    db.execute(
-        """
-        UPDATE signups
-
-        SET status = 'approved'
-
-        WHERE id = ?
-        """,
-        (signup_id,)
-    )
-
+    user = current_user()
+    db.execute("UPDATE signups SET status = 'approved' WHERE id = ?", (signup_id,))
+    log_activity(db, user, "approved Seva hours", "signup", signup_id,
+                 {"user_id": str(signup["user_id"]), "hours": float(signup["hours"] or 0)})
     db.commit()
     notify_user(signup["user_id"], "Seva hours approved", "Your completed Seva hours have been approved.", "/dashboard")
     db.close()
@@ -6149,17 +6194,10 @@ def reject_signup(signup_id):
 
         abort(404)
 
-    db.execute(
-        """
-        UPDATE signups
-
-        SET status = 'rejected'
-
-        WHERE id = ?
-        """,
-        (signup_id,)
-    )
-
+    user = current_user()
+    db.execute("UPDATE signups SET status = 'rejected' WHERE id = ?", (signup_id,))
+    log_activity(db, user, "rejected Seva hours", "signup", signup_id,
+                 {"user_id": str(signup["user_id"])})
     db.commit()
     notify_user(signup["user_id"], "Seva hours rejected", "Your completed Seva hours were not approved. Please contact the administrator if you need clarification.", "/dashboard")
     db.close()
