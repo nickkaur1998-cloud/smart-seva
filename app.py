@@ -1255,8 +1255,310 @@ body.large-text p, body.large-text label, body.large-text input, body.large-text
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+
+/* Smart Seva refresh: cohesive spacing, calmer surfaces, and a polished landing page. */
+:root {
+    --ink: #060b19;
+    --deep: #0b1225;
+    --midnight: #111c35;
+    --gold: #d7a83e;
+    --sun: #ffe7a1;
+    --line: rgba(215,168,62,.24);
+    --surface: rgba(13,22,43,.86);
+    --surface-raised: rgba(22,33,59,.92);
+    --text-main: #f7f8fc;
+    --text-soft: #c0c9dc;
+}
+body {
+    background:
+        radial-gradient(ellipse at 12% 5%, rgba(37,63,112,.26), transparent 34rem),
+        radial-gradient(ellipse at 90% 45%, rgba(95,67,24,.10), transparent 30rem),
+        #030a1d;
+    color: var(--text-main);
+    line-height: 1.6;
+    letter-spacing: .005em;
+}
+nav {
+    min-height: 76px;
+    padding: 12px clamp(16px, 4vw, 56px);
+    gap: 18px;
+    background: rgba(4,9,22,.88);
+    border-bottom: 1px solid rgba(215,168,62,.2);
+    backdrop-filter: blur(22px);
+    animation: none;
+}
+.logo { flex-shrink: 0; font-size: 16px; letter-spacing: .1em; }
+.logo-mark { font-size: 34px; }
+.nav-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    flex: 1;
+    min-width: 0;
+}
+nav a, .nav-dropdown > summary {
+    margin: 0;
+    padding: 9px 11px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #e6eaf4;
+    transition: background .18s ease, color .18s ease, border-color .18s ease;
+}
+nav a:hover, nav a:focus-visible {
+    color: var(--sun);
+    background: rgba(215,168,62,.09);
+    text-shadow: none;
+}
+.nav-dropdown > summary {
+    border-color: transparent;
+    background: transparent;
+}
+.nav-dropdown > summary:hover, .nav-dropdown[open] > summary {
+    background: rgba(255,255,255,.055);
+}
+.nav-dropdown-menu {
+    min-width: 215px;
+    padding: 9px;
+    border-color: rgba(215,168,62,.3);
+    background: rgba(7,13,29,.985);
+}
+.nav-dropdown-menu a { padding: 11px 12px; font-size: 13px; }
+.nav-actions .dark-button, .nav-actions .qr-menu-button, .nav-actions .translate-button {
+    padding: 9px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+.container {
+    width: min(100%, 1280px);
+    padding: clamp(28px, 4vw, 52px) clamp(16px, 3vw, 32px);
+}
+h1, h2, h3 { line-height: 1.2; letter-spacing: -.025em; }
+h1 { font-size: clamp(2rem, 4vw, 3.15rem); }
+h2 { font-size: clamp(1.45rem, 2.5vw, 2.05rem); }
+h3 { font-size: 1.12rem; }
+p { max-width: 78ch; }
+.card {
+    background: linear-gradient(145deg, rgba(18,30,55,.92), rgba(9,17,35,.91));
+    border: 1px solid rgba(178,194,225,.13);
+    border-radius: 18px;
+    padding: clamp(20px, 2.4vw, 30px);
+    box-shadow: 0 16px 42px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.035);
+    animation: none;
+}
+.card::before { opacity: .55; }
+.grid { gap: 18px; }
+input, textarea, select {
+    border-radius: 11px;
+    border-color: rgba(190,204,229,.2);
+    background: rgba(4,10,23,.8);
+    color: #fff;
+}
+input::placeholder, textarea::placeholder { color: #929db4; }
+button, .button {
+    border-radius: 11px;
+    font-weight: 750;
+    min-height: 42px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.12);
+}
+.dark-button {
+    border: 1px solid rgba(215,168,62,.28);
+    background: rgba(255,255,255,.045);
+    color: #f4f6fb;
+}
+button:focus-visible, .button:focus-visible, a:focus-visible, summary:focus-visible,
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+    outline: 3px solid #ffe7a1;
+    outline-offset: 3px;
+}
+.table-wrap { border: 1px solid rgba(190,204,229,.13); border-radius: 14px; }
+table { min-width: 560px; }
+th { background: rgba(215,168,62,.08); }
+th, td { padding: 14px 16px; border-bottom-color: rgba(190,204,229,.12); }
+tr:last-child td { border-bottom: 0; }
+footer { padding: 34px 20px; color: #8f9bb3; font-size: 13px; letter-spacing: .04em; }
+
+/* Public landing page */
+.landing-hero {
+    position: relative;
+    z-index: 1;
+    width: min(1200px, calc(100% - 40px));
+    margin: 0 auto;
+    padding: clamp(48px, 7vw, 94px) 0 clamp(44px, 6vw, 76px);
+    display: grid;
+    grid-template-columns: minmax(0, 1.04fr) minmax(330px, .86fr);
+    align-items: center;
+    gap: clamp(36px, 6vw, 82px);
+}
+.landing-copy { position: relative; z-index: 2; }
+.eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--sun);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .16em;
+    line-height: 1.5;
+}
+.eyebrow-dot, .live-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--sun);
+    box-shadow: 0 0 14px rgba(255,231,161,.65);
+    display: inline-block;
+}
+.landing-copy h1 {
+    max-width: 680px;
+    margin: 22px 0 18px;
+    font-size: clamp(3rem, 6vw, 5.25rem);
+    font-weight: 800;
+    line-height: 1.02;
+    letter-spacing: -.055em;
+    animation: title-rise .7s ease both;
+}
+.landing-copy h1 .gold { display: inline; }
+.landing-lead {
+    max-width: 590px;
+    color: #c1cbe0;
+    font-size: clamp(16px, 1.6vw, 19px);
+    line-height: 1.8;
+    margin: 0 0 27px;
+}
+.hero-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.hero-actions .button { padding: 14px 20px; }
+.hero-trust {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 18px;
+    margin-top: 29px;
+    color: #b8c2d7;
+    font-size: 12px;
+}
+.trust-check { color: var(--sun); font-weight: 900; margin-right: 5px; }
+.landing-showcase {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    padding: 27px;
+    border: 1px solid rgba(215,168,62,.27);
+    border-radius: 25px;
+    background: linear-gradient(150deg, rgba(19,32,59,.96), rgba(7,14,31,.94));
+    box-shadow: 0 30px 100px rgba(0,0,0,.32), 0 0 60px rgba(215,168,62,.055);
+}
+.landing-showcase::before {
+    content: "";
+    position: absolute; z-index: -1;
+    width: 300px; height: 300px; top: -140px; right: -100px;
+    border-radius: 50%;
+    background: rgba(215,168,62,.11);
+    filter: blur(35px);
+}
+.showcase-orbit {
+    position: absolute; z-index: -1; border: 1px solid rgba(255,231,161,.1);
+    border-radius: 50%; pointer-events: none;
+}
+.orbit-one { width: 340px; height: 340px; top: 50px; right: -140px; }
+.orbit-two { width: 260px; height: 260px; top: 90px; right: -100px; }
+.showcase-topline { display: flex; align-items: center; gap: 9px; color: #aebbd2; font-size: 10px; font-weight: 800; letter-spacing: .15em; }
+.showcase-emblem {
+    display: grid; place-items: center; width: 70px; height: 70px;
+    margin: 26px 0 18px; border: 1px solid rgba(255,231,161,.46);
+    border-radius: 50%; color: var(--sun); font-size: 42px;
+    box-shadow: 0 0 0 8px rgba(215,168,62,.035), 0 0 36px rgba(215,168,62,.12);
+}
+.showcase-title { font-size: clamp(22px, 2.4vw, 30px); line-height: 1.25; font-weight: 800; letter-spacing: -.035em; }
+.showcase-steps { display: grid; gap: 9px; margin-top: 25px; }
+.showcase-step {
+    display: grid; grid-template-columns: 38px 1fr 20px; gap: 12px; align-items: center;
+    padding: 13px 14px; border: 1px solid rgba(190,204,229,.1);
+    border-radius: 13px; background: rgba(255,255,255,.035);
+}
+.step-number { color: var(--sun); font-size: 12px; font-weight: 800; }
+.showcase-step strong { display: block; font-size: 13px; }
+.showcase-step small { display: block; margin-top: 2px; color: #9eabc3; font-size: 11px; }
+.step-arrow { color: var(--sun); text-align: right; }
+.showcase-footnote { margin-top: 18px; color: #8f9bb3; font-size: 11px; text-align: center; letter-spacing: .04em; }
+.landing-section {
+    position: relative; z-index: 1;
+    padding: clamp(44px, 6vw, 78px) max(20px, calc((100% - 1200px)/2));
+    border-top: 1px solid rgba(190,204,229,.08);
+    background: linear-gradient(180deg, rgba(7,14,29,.68), rgba(5,11,24,.42));
+}
+.section-intro { max-width: 680px; margin-bottom: 29px; }
+.section-intro h2 { margin: 13px 0 10px; font-size: clamp(27px, 3.4vw, 40px); }
+.section-intro p { margin: 0; line-height: 1.75; }
+.landing-features { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 15px; }
+.feature-card {
+    display: flex; flex-direction: column; align-items: flex-start;
+    min-height: 265px; padding: 23px 21px;
+    border: 1px solid rgba(190,204,229,.12); border-radius: 17px;
+    background: linear-gradient(150deg, rgba(17,29,54,.88), rgba(8,15,31,.88));
+    transition: transform .2s ease, border-color .2s ease, background .2s ease;
+}
+.feature-card:hover { transform: translateY(-4px); border-color: rgba(215,168,62,.4); background: rgba(18,30,55,.96); }
+.feature-icon {
+    display: grid; place-items: center; width: 43px; height: 43px;
+    margin-bottom: 20px; border-radius: 12px; color: var(--sun);
+    background: rgba(215,168,62,.1); border: 1px solid rgba(215,168,62,.2); font-size: 22px;
+}
+.feature-label { color: #d8b65e; font-size: 10px; font-weight: 800; letter-spacing: .15em; }
+.feature-card h3 { margin: 8px 0; font-size: 17px; }
+.feature-card p { margin: 0 0 18px; font-size: 13px; line-height: 1.75; }
+.feature-link { margin-top: auto; color: var(--sun); font-size: 12px; font-weight: 800; text-decoration: none; }
+.feature-link:hover { color: #fff1c4; text-decoration: underline; text-underline-offset: 4px; }
+.landing-cta {
+    position: relative; z-index: 1;
+    display: grid; grid-template-columns: 62px 1fr auto; align-items: center; gap: 23px;
+    width: min(1200px, calc(100% - 40px)); margin: 44px auto 70px;
+    padding: 27px 30px; border: 1px solid rgba(215,168,62,.25); border-radius: 20px;
+    background: linear-gradient(115deg, rgba(215,168,62,.09), rgba(17,29,54,.84) 44%, rgba(17,29,54,.58));
+}
+.cta-emblem { display: grid; place-items: center; width: 58px; height: 58px; border: 1px solid rgba(255,231,161,.45); border-radius: 50%; color: var(--sun); font-size: 34px; }
+.landing-cta h2 { margin: 6px 0; font-size: clamp(22px, 2.5vw, 31px); }
+.landing-cta p { margin: 0; font-size: 13px; }
+.cta-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.cta-actions .button { white-space: nowrap; }
+@media (max-width: 1100px) {
+    nav { align-items: flex-start; }
+    .nav-actions { flex-wrap: wrap; }
+    .landing-features { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+@media (max-width: 820px) {
+    .landing-hero { grid-template-columns: 1fr; width: min(100% - 32px, 680px); gap: 36px; padding-top: 48px; }
+    .landing-copy h1 { max-width: 620px; font-size: clamp(2.8rem, 9vw, 4.5rem); }
+    .landing-showcase { max-width: 580px; width: 100%; margin: 0 auto; }
+    .landing-section { padding: 45px 20px; }
+    .landing-cta { grid-template-columns: 52px 1fr; gap: 16px; }
+    .cta-emblem { width: 50px; height: 50px; }
+    .cta-actions { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; }
+}
+@media (max-width: 700px) {
+    nav { position: sticky; padding: 13px 14px; align-items: stretch; gap: 12px; }
+    .logo { justify-content: center; font-size: 15px; }
+    .nav-actions { justify-content: center; gap: 5px; }
+    .nav-actions > a, .nav-actions > .nav-dropdown > summary { padding: 9px 8px; font-size: 12px; }
+    .nav-actions .dark-button, .nav-actions .qr-menu-button, .nav-actions .translate-button { padding: 8px; font-size: 11px; }
+    .nav-dropdown-menu { position: absolute; left: 0; right: auto; max-width: calc(100vw - 24px); }
+    .landing-features { grid-template-columns: 1fr; }
+    .feature-card { min-height: 0; }
+    .hero-trust { display: grid; gap: 9px; }
+    .landing-cta { width: calc(100% - 28px); padding: 22px 19px; margin: 30px auto 45px; }
+    .landing-cta .button { white-space: normal; }
+    .showcase-step { grid-template-columns: 30px 1fr 18px; padding: 12px; }
+    .card { padding: 20px; }
+    .status-flow { grid-template-columns: 1fr; }
+    .table-wrap { max-width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .feature-card { transition: none; }
+    .feature-card:hover { transform: none; }
+}
+
 </style>
-"""
+
 
 
 # ============================================================
@@ -1398,16 +1700,26 @@ def layout(content, title="Smart Seva"):
             """
         else:
             nav = """
-                <a href="/dashboard">Dashboard</a>
-                <a href="/seva">Seva</a>
-                <a href="/my-calendar">My Calendar</a>
+                <a class="nav-primary-link" href="/dashboard">Dashboard</a>
+                <details class="nav-dropdown">
+                    <summary>Explore</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/seva">Seva Opportunities</a>
+                        <a href="/paath">Paath Sponsorship</a>
+                        <a href="/pantry">Food Pantry</a>
+                        <a href="/events">Special Events</a>
+                    </div>
+                </details>
+                <details class="nav-dropdown">
+                    <summary>My Seva</summary>
+                    <div class="nav-dropdown-menu">
+                        <a href="/my-calendar">My Calendar</a>
+                        <a href="/profile">My Profile</a>
+                        <a href="/notifications" aria-label="Notifications">Notifications {notification_link}</a>
+                    </div>
+                </details>
                 <a href="/impact">Community Impact</a>
-                <a href="/paath">Paath</a>
-                <a href="/pantry">Pantry</a>
-                <a href="/events">Events</a>
-                <a href="/profile">Profile</a>
-                <a href="/notifications" aria-label="Notifications">🔔{notification_link}</a>
-                <a href="/logout">Logout</a>
+                <a href="/logout">Log out</a>
             """
             nav = nav.replace("{notification_link}", notification_link)
 
@@ -1997,90 +2309,94 @@ def layout(content, title="Smart Seva"):
 
 @app.route("/")
 def home():
-
     return layout(
         """
-        <section class="hero">
-
-            <div class="hero-emblem" aria-label="Ik Onkar emblem">
-                ੴ
+        <section class="landing-hero">
+            <div class="landing-copy">
+                <div class="eyebrow"><span class="eyebrow-dot"></span> SEVA · SANGAT · COMMUNITY</div>
+                <h1>Make service <span class="gold">mean something.</span></h1>
+                <p class="landing-lead">
+                    One welcoming place to discover opportunities, keep track of verified service hours,
+                    and celebrate the difference your community makes together.
+                </p>
+                <div class="hero-actions">
+                    <a class="button" href="/register">Get started <span aria-hidden="true">→</span></a>
+                    <a class="button dark-button" href="/login">Sign in</a>
+                </div>
+                <div class="hero-trust">
+                    <span><span class="trust-check">✓</span> Find meaningful seva</span>
+                    <span><span class="trust-check">✓</span> Track approved hours</span>
+                    <span><span class="trust-check">✓</span> Celebrate community impact</span>
+                </div>
             </div>
-
-            <div class="small">
-                SEVA • SANGAT • COMMUNITY
-            </div>
-
-            <h1>
-                Serve.
-                <span class="gold">
-                    Track.
-                </span>
-                Achieve.
-            </h1>
-
-            <p
-                class="muted"
-                style="max-width:700px;margin:25px auto;font-size:19px"
-            >
-                Smart Seva helps students participate in
-                community service, track verified hours,
-                and earn certificates.
-            </p>
-
-            <br>
-
-            <a
-                class="button"
-                href="/register"
-            >
-                Create Account →
-            </a>
-
-            <a
-                class="button dark-button"
-                href="/login"
-                style="margin-left:10px"
-            >
-                Login
-            </a>
-
+            <aside class="landing-showcase" aria-label="How Smart Seva helps">
+                <div class="showcase-orbit orbit-one"></div>
+                <div class="showcase-orbit orbit-two"></div>
+                <div class="showcase-topline"><span class="live-dot"></span> YOUR SERVICE JOURNEY</div>
+                <div class="showcase-emblem" aria-hidden="true">ੴ</div>
+                <div class="showcase-title">Every act of service<br><span class="gold">makes a difference.</span></div>
+                <div class="showcase-steps">
+                    <div class="showcase-step"><span class="step-number">01</span><span><strong>Discover</strong><small>Find a seva opportunity</small></span><span class="step-arrow">↗</span></div>
+                    <div class="showcase-step"><span class="step-number">02</span><span><strong>Participate</strong><small>Show up for your community</small></span><span class="step-arrow">↗</span></div>
+                    <div class="showcase-step"><span class="step-number">03</span><span><strong>Make an impact</strong><small>Track verified contributions</small></span><span class="step-arrow">✦</span></div>
+                </div>
+                <div class="showcase-footnote">Small acts. Shared purpose. Lasting impact.</div>
+            </aside>
         </section>
 
-        <div class="container">
-
-            <div class="grid">
-
-                <div class="card center">
-                    <div class="stat">🙏</div>
-                    <h3>Discover Seva</h3>
-                    <p class="muted">
-                        Find community service opportunities.
-                    </p>
-                </div>
-
-                <div class="card center">
-                    <div class="stat">⏱</div>
-                    <h3>Track Hours</h3>
-                    <p class="muted">
-                        Check in and check out of seva.
-                    </p>
-                </div>
-
-                <div class="card center">
-                    <div class="stat">🏆</div>
-                    <h3>Earn Certificates</h3>
-                    <p class="muted">
-                        Reach your goal and receive a certificate.
-                    </p>
-                </div>
-
+        <section class="landing-section">
+            <div class="section-intro">
+                <div class="eyebrow">BUILT AROUND YOUR JOURNEY</div>
+                <h2>Everything you need to <span class="gold">give back.</span></h2>
+                <p class="muted">From your first signup to your latest milestone, keep your service journey organized in one place.</p>
             </div>
+            <div class="landing-features">
+                <article class="feature-card">
+                    <div class="feature-icon" aria-hidden="true">✧</div>
+                    <div class="feature-label">DISCOVER</div>
+                    <h3>Find your next seva</h3>
+                    <p class="muted">Explore community opportunities and events, then sign up for the ones that matter to you.</p>
+                    <a href="/seva" class="feature-link">Explore opportunities <span aria-hidden="true">→</span></a>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-icon" aria-hidden="true">◷</div>
+                    <div class="feature-label">KEEP TRACK</div>
+                    <h3>Your hours, clearly organized</h3>
+                    <p class="muted">Follow your signups, check-in progress, approved hours, and personal service goals.</p>
+                    <a href="/login" class="feature-link">View your dashboard <span aria-hidden="true">→</span></a>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-icon" aria-hidden="true">✦</div>
+                    <div class="feature-label">CELEBRATE</div>
+                    <h3>See the bigger impact</h3>
+                    <p class="muted">Celebrate milestones, access eligible certificates, and see what the community achieves together.</p>
+                    <a href="/impact" class="feature-link">Explore community impact <span aria-hidden="true">→</span></a>
+                </article>
+                <article class="feature-card">
+                    <div class="feature-icon" aria-hidden="true">♡</div>
+                    <div class="feature-label">CARE TOGETHER</div>
+                    <h3>Support the community</h3>
+                    <p class="muted">Discover food pantry needs, paath sponsorships, and other ways to lend a helping hand.</p>
+                    <a href="/register" class="feature-link">Join Smart Seva <span aria-hidden="true">→</span></a>
+                </article>
+            </div>
+        </section>
 
-        </div>
+        <section class="landing-cta">
+            <div class="cta-emblem" aria-hidden="true">ੴ</div>
+            <div>
+                <div class="eyebrow">YOUR COMMUNITY. YOUR IMPACT.</div>
+                <h2>Make your time <span class="gold">count.</span></h2>
+                <p class="muted">Start your Smart Seva journey today.</p>
+            </div>
+            <div class="cta-actions">
+                <a class="button" href="/register">Create your account →</a>
+                <a class="feature-link" href="/login">Already a member? Sign in</a>
+            </div>
+        </section>
         """,
         "Home"
     )
-
 
 # ============================================================
 # REGISTER
