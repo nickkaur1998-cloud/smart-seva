@@ -1599,62 +1599,117 @@ def layout(content, title="Smart Seva"):
             }} catch (e) {{}}
         }})();
         function showEnglish() {{ window.location.reload(); }}
-        async function translatePageToPunjabi() {{
+        function translatePageToPunjabi() {{
+            // Offline dictionary: no API key, account, network request, or billing.
+            // This translates known interface phrases; user-written descriptions
+            // and other text not in the dictionary remain in English.
+            const dictionary = {{
+                "Skip to main content": "ਮੁੱਖ ਸਮੱਗਰੀ 'ਤੇ ਜਾਓ",
+                "Dashboard": "ਡੈਸ਼ਬੋਰਡ",
+                "Manage Seva": "ਸੇਵਾ ਪ੍ਰਬੰਧਨ",
+                "Manage Paath": "ਪਾਠ ਪ੍ਰਬੰਧਨ",
+                "Manage Pantry": "ਪੈਂਟਰੀ ਪ੍ਰਬੰਧਨ",
+                "Manage Events": "ਸਮਾਗਮ ਪ੍ਰਬੰਧਨ",
+                "Activity Log": "ਗਤੀਵਿਧੀ ਲੌਗ",
+                "My Calendar": "ਮੇਰਾ ਕੈਲੰਡਰ",
+                "Community Impact": "ਭਾਈਚਾਰੇ 'ਤੇ ਪ੍ਰਭਾਵ",
+                "Manage": "ਪ੍ਰਬੰਧਨ",
+                "Community": "ਭਾਈਚਾਰਾ",
+                "Explore": "ਵੇਖੋ",
+                "Login": "ਲਾਗ ਇਨ",
+                "Register": "ਰਜਿਸਟਰ ਕਰੋ",
+                "Logout": "ਲਾਗ ਆਉਟ",
+                "Create Account": "ਖਾਤਾ ਬਣਾਓ",
+                "Seva Opportunities": "ਸੇਵਾ ਦੇ ਮੌਕੇ",
+                "Seva": "ਸੇਵਾ",
+                "Paath": "ਪਾਠ",
+                "Pantry": "ਪੈਂਟਰੀ",
+                "Events": "ਸਮਾਗਮ",
+                "Profile": "ਪ੍ਰੋਫ਼ਾਈਲ",
+                "Notifications": "ਸੂਚਨਾਵਾਂ",
+                "Search": "ਖੋਜੋ",
+                "Filter": "ਫਿਲਟਰ",
+                "Submit": "ਜਮ੍ਹਾਂ ਕਰੋ",
+                "Save": "ਸੇਵ ਕਰੋ",
+                "Cancel": "ਰੱਦ ਕਰੋ",
+                "Close": "ਬੰਦ ਕਰੋ",
+                "Back": "ਪਿੱਛੇ",
+                "Next": "ਅੱਗੇ",
+                "Edit": "ਸੋਧੋ",
+                "Delete": "ਮਿਟਾਓ",
+                "View": "ਵੇਖੋ",
+                "Details": "ਵੇਰਵੇ",
+                "Description": "ਵੇਰਵਾ",
+                "Date": "ਤਾਰੀਖ",
+                "Time": "ਸਮਾਂ",
+                "Location": "ਸਥਾਨ",
+                "Status": "ਸਥਿਤੀ",
+                "Open": "ਖੁੱਲ੍ਹਾ",
+                "Closed": "ਬੰਦ",
+                "Hours": "ਘੰਟੇ",
+                "Approved Hours": "ਮਨਜ਼ੂਰ ਕੀਤੇ ਘੰਟੇ",
+                "Volunteer": "ਵਲੰਟੀਅਰ",
+                "Sign Up": "ਸਾਈਨ ਅੱਪ ਕਰੋ",
+                "Sign-ups": "ਸਾਈਨ-ਅੱਪ",
+                "Check In": "ਚੈੱਕ ਇਨ",
+                "Check Out": "ਚੈੱਕ ਆਉਟ",
+                "Certificates": "ਸਰਟੀਫਿਕੇਟ",
+                "My Seva": "ਮੇਰੀ ਸੇਵਾ",
+                "Student": "ਵਿਦਿਆਰਥੀ",
+                "Admin": "ਐਡਮਿਨ",
+                "Name": "ਨਾਮ",
+                "Email": "ਈਮੇਲ",
+                "Password": "ਪਾਸਵਰਡ",
+                "Phone": "ਫ਼ੋਨ",
+                "Welcome": "ਜੀ ਆਇਆਂ ਨੂੰ",
+                "Loading…": "ਲੋਡ ਹੋ ਰਿਹਾ ਹੈ…",
+                "Loading...": "ਲੋਡ ਹੋ ਰਿਹਾ ਹੈ...",
+                "No results found": "ਕੋਈ ਨਤੀਜੇ ਨਹੀਂ ਮਿਲੇ",
+                "Community service": "ਭਾਈਚਾਰੇ ਦੀ ਸੇਵਾ",
+                "Serve.": "ਸੇਵਾ ਕਰੋ।",
+                "Track.": "ਰਿਕਾਰਡ ਰੱਖੋ।",
+                "Achieve.": "ਟੀਚੇ ਹਾਸਲ ਕਰੋ।",
+                "Create Account →": "ਖਾਤਾ ਬਣਾਓ →",
+                "QR Code": "QR ਕੋਡ",
+                "A+ Text": "A+ ਵੱਡਾ ਅੱਖਰ",
+                "English": "ਅੰਗਰੇਜ਼ੀ",
+                "Scan to Open Smart Seva": "Smart Seva ਖੋਲ੍ਹਣ ਲਈ ਸਕੈਨ ਕਰੋ",
+                "Your Smart Seva helper": "ਤੁਹਾਡਾ Smart Seva ਸਹਾਇਕ",
+                "How to sign up": "ਸਾਈਨ ਅੱਪ ਕਿਵੇਂ ਕਰੀਏ",
+                "Hours approval": "ਘੰਟਿਆਂ ਦੀ ਮਨਜ਼ੂਰੀ",
+                "Send": "ਭੇਜੋ"
+            }};
             const button = document.querySelector(".translate-button");
             if (button) {{
                 button.disabled = true;
-                button.textContent = "ਪੰਜਾਬੀ…";
+                button.textContent = "ਪੰਜਾਬੀ ✓";
             }}
-
-            const nodes = [];
+            const keys = Object.keys(dictionary).sort((a, b) => b.length - a.length);
+            const escaped = keys.map(key => key.replace(/[.*+?^[object Object]()|[\]\\]/g, "\\$&"));
+            const matcher = new RegExp(escaped.join("|"), "g");
             const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {{
                 acceptNode(node) {{
                     const parent = node.parentElement;
-                    if (!parent) return NodeFilter.FILTER_REJECT;
-                    if (parent.closest("script, style, noscript, textarea, input, select, option, button")) {{
+                    if (!parent || parent.closest("script, style, noscript, textarea, input, select, option")) {{
                         return NodeFilter.FILTER_REJECT;
                     }}
                     if (!node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
                     return NodeFilter.FILTER_ACCEPT;
                 }}
             }});
-
             let node;
-            while ((node = walker.nextNode())) nodes.push(node);
-            const texts = nodes.map(n => n.nodeValue);
-
-            try {{
-                const response = await fetch("/api/translate", {{
-                    method: "POST",
-                    headers: {{"Content-Type": "application/json"}},
-                    body: JSON.stringify({{texts: texts, target: "pa"}})
-                }});
-                const responseText = await response.text();
-                let data;
-                try {{
-                    data = JSON.parse(responseText);
-                }} catch (parseError) {{
-                    if (response.redirected || responseText.trim().startsWith("<")) {{
-                        throw new Error("Smart Seva returned a webpage instead of translation data. Please refresh the page and try again.");
-                    }}
-                    throw new Error("The translation service returned an unreadable response. Please try again.");
-                }}
-                if (!response.ok) throw new Error(data.error || "Translation failed.");
-
-                if (Array.isArray(data.translations)) {{
-                    nodes.forEach((n, i) => {{
-                        if (data.translations[i]) n.nodeValue = data.translations[i];
-                    }});
-                }}
-            }} catch (error) {{
-                console.error(error);
-                alert(error.message || "Punjabi translation is temporarily unavailable.");
-            }} finally {{
-                if (button) {{
-                    button.disabled = false;
-                    button.textContent = "ਪੰਜਾਬੀ";
-                }}
+            while ((node = walker.nextNode())) {{
+                node.nodeValue = node.nodeValue.replace(matcher, phrase => dictionary[phrase]);
             }}
+            const labels = {{
+                "Translate this page to Punjabi": "ਇਸ ਪੰਨੇ ਦਾ ਪੰਜਾਬੀ ਵਿੱਚ ਅਨੁਵਾਦ ਕਰੋ",
+                "Return to English": "ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਵਾਪਸ ਜਾਓ",
+                "Show QR code for Smart Seva": "Smart Seva ਦਾ QR ਕੋਡ ਦਿਖਾਓ"
+            }};
+            document.querySelectorAll("[aria-label]").forEach(element => {{
+                const label = element.getAttribute("aria-label");
+                if (labels[label]) element.setAttribute("aria-label", labels[label]);
+            }});
         }}
         </script>
 
@@ -1665,104 +1720,6 @@ def layout(content, title="Smart Seva"):
 
 
 # ============================================================
-# TRANSLATION
-# ============================================================
-
-@app.route("/api/translate", methods=["POST"])
-def translate_api():
-    """Translate page text into Punjabi using MyMemory's free translation endpoint."""
-    payload = request.get_json(silent=True) or {}
-    texts = payload.get("texts", [])
-    target = clean(payload.get("target", "pa"), 10)
-
-    if target != "pa" or not isinstance(texts, list):
-        return jsonify({"error": "Invalid translation request."}), 400
-
-    texts = [str(item) for item in texts if str(item).strip()]
-    if not texts:
-        return jsonify({"translations": []})
-    if len(texts) > 128:
-        return jsonify({"error": "Too many text items in one request."}), 400
-    if sum(len(item) for item in texts) > 30000:
-        return jsonify({"error": "Page is too large to translate at once."}), 400
-
-    # MyMemory's public endpoint accepts short segments without an API key.
-    # Group short text nodes to reduce request count; use a marker to separate
-    # translations, with a per-segment fallback if the marker is changed.
-    marker = "ZXQSEVA000ZXQ"
-    pieces = []
-    for index, item in enumerate(texts):
-        remaining = item.strip()
-        while remaining:
-            if len(remaining) <= 350:
-                piece, remaining = remaining, ""
-            else:
-                split_at = remaining.rfind(" ", 0, 350)
-                if split_at < 100:
-                    split_at = 350
-                piece, remaining = remaining[:split_at], remaining[split_at:].lstrip()
-            pieces.append((index, piece))
-
-    groups = []
-    current = []
-    current_length = 0
-    for item in pieces:
-        piece_length = len(item[1])
-        added_length = piece_length + (len(marker) if current else 0)
-        if current and current_length + added_length > 420:
-            groups.append(current)
-            current = []
-            current_length = 0
-            added_length = piece_length
-        current.append(item)
-        current_length += added_length
-    if current:
-        groups.append(current)
-
-    translated_pieces = [[] for _ in texts]
-
-    def request_translation(text):
-        query = urlencode({"q": text, "langpair": "en|pa-IN"})
-        req = Request(
-            "https://api.mymemory.translated.net/get?" + query,
-            headers={"Accept": "application/json", "User-Agent": "SmartSeva/1.0"}
-        )
-        with urlopen(req, timeout=15) as response:
-            result = json.loads(response.read().decode("utf-8"))
-        if str(result.get("responseStatus", "")) != "200":
-            details = result.get("responseDetails") or "Translation service returned an error."
-            raise ValueError(str(details))
-        translated = result.get("responseData", {}).get("translatedText", "")
-        if not translated:
-            raise ValueError("Translation service returned an empty translation.")
-        return translated
-
-    try:
-        for group in groups:
-            joined = (" " + marker + " ").join(piece for _, piece in group)
-            try:
-                batch_result = request_translation(joined)
-                split_results = batch_result.split(marker)
-                if len(split_results) != len(group):
-                    raise ValueError("Translation separator was not preserved.")
-                for (index, _), translated in zip(group, split_results):
-                    translated_pieces[index].append(translated.strip())
-            except (ValueError, HTTPError, URLError, TimeoutError):
-                # Retry separately if the translation service changes/removes
-                # our separator, so text from different page elements won't mix.
-                for index, piece in group:
-                    translated_pieces[index].append(request_translation(piece).strip())
-
-        translations = [" ".join(part for part in parts if part) for parts in translated_pieces]
-        return jsonify({"translations": translations})
-    except HTTPError as error:
-        return jsonify({"error": "The free translation service returned HTTP " + str(error.code) + "."}), 502
-    except (URLError, TimeoutError):
-        return jsonify({"error": "The free translation service could not be reached. Please try again."}), 502
-    except (ValueError, KeyError, TypeError) as error:
-        return jsonify({"error": "Punjabi translation failed: " + str(error)[:250]}), 502
-
-
 # HOME
 # ============================================================
 
