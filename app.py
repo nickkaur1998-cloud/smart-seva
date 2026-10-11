@@ -1837,7 +1837,55 @@ def layout(content, title="Smart Seva"):
                 "Import": "ਇੰਪੋਰਟ ਕਰੋ",
                 "English Version": "ਅੰਗਰੇਜ਼ੀ ਵਰਜਨ",
                 "Punjabi": "ਪੰਜਾਬੀ",
-                "Return to English": "ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਵਾਪਸ ਜਾਓ"
+                "Return to English": "ਅੰਗਰੇਜ਼ੀ ਵਿੱਚ ਵਾਪਸ ਜਾਓ",
+                "Hi! I can help you understand sign-ups, check-in/out, approved hours, and finding Seva opportunities. What would you like to know?": "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਮੈਂ ਤੁਹਾਨੂੰ ਸਾਈਨ-ਅੱਪ, ਚੈੱਕ-ਇਨ/ਚੈੱਕ-ਆਉਟ, ਮਨਜ਼ੂਰਸ਼ੁਦਾ ਘੰਟਿਆਂ ਅਤੇ ਸੇਵਾ ਦੇ ਮੌਕੇ ਲੱਭਣ ਵਿੱਚ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ। ਤੁਸੀਂ ਕੀ ਜਾਣਨਾ ਚਾਹੁੰਦੇ ਹੋ?",
+                "Seva Bot can make mistakes. Only admins can approve or change service hours.": "ਸੇਵਾ ਬੋਟ ਤੋਂ ਗਲਤੀਆਂ ਹੋ ਸਕਦੀਆਂ ਹਨ। ਸਿਰਫ਼ ਐਡਮਿਨ ਹੀ ਸੇਵਾ ਦੇ ਘੰਟਿਆਂ ਨੂੰ ਮਨਜ਼ੂਰ ਜਾਂ ਬਦਲ ਸਕਦੇ ਹਨ।",
+                "I couldn't connect just now. Please try again.": "ਮੈਂ ਹੁਣੇ ਜੁੜ ਨਹੀਂ ਸਕਿਆ। ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।",
+                "Try changing your filters or check back soon.": "ਆਪਣੇ ਫਿਲਟਰ ਬਦਲ ਕੇ ਵੇਖੋ ਜਾਂ ਕੁਝ ਸਮੇਂ ਬਾਅਦ ਮੁੜ ਜਾਂਚ ਕਰੋ।",
+                "Showing all Seva opportunities.": "ਸੇਵਾ ਦੇ ਸਾਰੇ ਮੌਕੇ ਦਿਖਾਏ ਜਾ ਰਹੇ ਹਨ।",
+                "Find the right opportunity, check availability, and plan your service.": "ਆਪਣੇ ਲਈ ਢੁੱਕਵਾਂ ਮੌਕਾ ਲੱਭੋ, ਉਪਲਬਧਤਾ ਵੇਖੋ ਅਤੇ ਆਪਣੀ ਸੇਵਾ ਦੀ ਯੋਜਨਾ ਬਣਾਓ।",
+                "Click a Seva on the calendar to filter the list by that date.": "ਉਸ ਤਾਰੀਖ਼ ਦੀ ਸੂਚੀ ਵੇਖਣ ਲਈ ਕੈਲੰਡਰ ਵਿੱਚ ਕਿਸੇ ਸੇਵਾ 'ਤੇ ਕਲਿੱਕ ਕਰੋ।",
+                "The administrator has not published any paath slots.": "ਐਡਮਿਨ ਨੇ ਹਾਲੇ ਪਾਠ ਲਈ ਕੋਈ ਸਮਾਂ-ਸਲਾਟ ਪ੍ਰਕਾਸ਼ਿਤ ਨਹੀਂ ਕੀਤਾ।",
+                "Choose a date and time to sponsor a paath. Your request will be reviewed by an administrator.": "ਪਾਠ ਦੀ ਸੇਵਾ ਲਈ ਤਾਰੀਖ਼ ਅਤੇ ਸਮਾਂ ਚੁਣੋ। ਤੁਹਾਡੀ ਬੇਨਤੀ ਦੀ ਸਮੀਖਿਆ ਐਡਮਿਨ ਵੱਲੋਂ ਕੀਤੀ ਜਾਵੇਗੀ।",
+                "Create time-based sponsorship slots and review requests.": "ਸਮੇਂ ਅਨੁਸਾਰ ਸਹਿਯੋਗ ਦੇ ਸਲਾਟ ਬਣਾਓ ਅਤੇ ਬੇਨਤੀਆਂ ਦੀ ਸਮੀਖਿਆ ਕਰੋ।",
+                "No paath slots published yet.": "ਹਾਲੇ ਪਾਠ ਲਈ ਕੋਈ ਸਲਾਟ ਪ੍ਰਕਾਸ਼ਿਤ ਨਹੀਂ ਕੀਤਾ ਗਿਆ।",
+                "No sponsorship requests yet.": "ਹਾਲੇ ਸਹਿਯੋਗ ਲਈ ਕੋਈ ਬੇਨਤੀਆਂ ਨਹੀਂ ਹਨ।",
+                "This Seva is closed because its end time has passed.": "ਇਸ ਸੇਵਾ ਦਾ ਸਮਾਂ ਸਮਾਪਤ ਹੋਣ ਕਰਕੇ ਇਹ ਬੰਦ ਹੈ।",
+                "Only future signups that have not been checked in can be cancelled.": "ਸਿਰਫ਼ ਭਵਿੱਖ ਦੀਆਂ ਉਹ ਬੁਕਿੰਗਾਂ ਰੱਦ ਕੀਤੀਆਂ ਜਾ ਸਕਦੀਆਂ ਹਨ ਜਿਨ੍ਹਾਂ ਲਈ ਚੈੱਕ-ਇਨ ਨਹੀਂ ਹੋਇਆ।",
+                "Keep a live list of ingredients and offer unused surplus to another gurdwara.": "ਸਮੱਗਰੀ ਦੀ ਅੱਪਡੇਟ ਸੂਚੀ ਰੱਖੋ ਅਤੇ ਬਚੀ ਹੋਈ ਵਾਧੂ ਸਮੱਗਰੀ ਕਿਸੇ ਹੋਰ ਗੁਰਦੁਆਰੇ ਨੂੰ ਦਿਓ।",
+                "This need is fully covered": "ਇਸ ਲੋੜ ਲਈ ਸਾਰਾ ਸਮਾਨ ਮਿਲ ਗਿਆ ਹੈ",
+                "kg and lb are converted automatically.": "ਕਿਲੋਗ੍ਰਾਮ ਅਤੇ ਪੌਂਡ ਦੀ ਇਕਾਈ ਆਪਣੇ ਆਪ ਬਦਲੀ ਜਾਂਦੀ ਹੈ।",
+                "Choose an ingredient published by the administrator and sign up to bring it.": "ਐਡਮਿਨ ਵੱਲੋਂ ਦਰਜ ਕੀਤੀ ਸਮੱਗਰੀ ਚੁਣੋ ਅਤੇ ਇਸ ਨੂੰ ਲਿਆਉਣ ਲਈ ਸਾਈਨ ਅੱਪ ਕਰੋ।",
+                "No ingredient requests yet.": "ਹਾਲੇ ਸਮੱਗਰੀ ਲਈ ਕੋਈ ਬੇਨਤੀਆਂ ਨਹੀਂ ਹਨ।",
+                "The administrator has not published any food ingredient needs.": "ਐਡਮਿਨ ਨੇ ਹਾਲੇ ਭੋਜਨ ਸਮੱਗਰੀ ਦੀਆਂ ਲੋੜਾਂ ਪ੍ਰਕਾਸ਼ਿਤ ਨਹੀਂ ਕੀਤੀਆਂ।",
+                "Publish the ingredients students should bring and review their commitments.": "ਉਹ ਸਮੱਗਰੀ ਦਰਜ ਕਰੋ ਜੋ ਵਿਦਿਆਰਥੀਆਂ ਨੇ ਲਿਆਉਣੀ ਹੈ ਅਤੇ ਉਨ੍ਹਾਂ ਦੀਆਂ ਵਚਨਬੱਧਤਾਵਾਂ ਦੀ ਸਮੀਖਿਆ ਕਰੋ।",
+                "For weight-based ingredients, choose kg or lb. Smart Seva converts kg and lb automatically.": "ਭਾਰ ਅਨੁਸਾਰ ਸਮੱਗਰੀ ਲਈ ਕਿਲੋਗ੍ਰਾਮ ਜਾਂ ਪੌਂਡ ਚੁਣੋ। Smart Seva ਇਹ ਇਕਾਈਆਂ ਆਪਣੇ ਆਪ ਬਦਲਦਾ ਹੈ।",
+                "Optional notes for students": "ਵਿਦਿਆਰਥੀਆਂ ਲਈ ਵਿਕਲਪਿਕ ਨੋਟਸ",
+                "You have not signed up for any Sevas yet. Browse Seva opportunities to get started.": "ਤੁਸੀਂ ਹਾਲੇ ਕਿਸੇ ਸੇਵਾ ਲਈ ਸਾਈਨ ਅੱਪ ਨਹੀਂ ਕੀਤਾ। ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਸੇਵਾ ਦੇ ਮੌਕੇ ਵੇਖੋ।",
+                "A personal schedule of Seva opportunities you have signed up for. Rejected signups are not shown.": "ਤੁਹਾਡੇ ਵੱਲੋਂ ਚੁਣੀਆਂ ਸੇਵਾਵਾਂ ਦਾ ਨਿੱਜੀ ਸਮਾਂ-ਸਾਰਣੀ। ਰੱਦ ਕੀਤੀਆਂ ਬੁਕਿੰਗਾਂ ਇੱਥੇ ਨਹੀਂ ਦਿਖਾਈਆਂ ਜਾਂਦੀਆਂ।",
+                "Pending signups are awaiting approval. Approved signups are confirmed.": "ਬਾਕੀ ਬੁਕਿੰਗਾਂ ਮਨਜ਼ੂਰੀ ਦੀ ਉਡੀਕ ਕਰ ਰਹੀਆਂ ਹਨ। ਮਨਜ਼ੂਰ ਬੁਕਿੰਗਾਂ ਦੀ ਪੁਸ਼ਟੀ ਹੋ ਚੁੱਕੀ ਹੈ।",
+                "Monthly participation will appear here after the first Seva hours are approved.": "ਪਹਿਲੇ ਸੇਵਾ ਘੰਟੇ ਮਨਜ਼ੂਰ ਹੋਣ ਤੋਂ ਬਾਅਦ ਮਹੀਨਾਵਾਰ ਭਾਗੀਦਾਰੀ ਇੱਥੇ ਦਿਖਾਈ ਦੇਵੇਗੀ।",
+                "A privacy-friendly snapshot of what our community has accomplished together. Only aggregate totals are shown.": "ਇਹ ਸਾਡੇ ਭਾਈਚਾਰੇ ਦੀਆਂ ਸਾਂਝੀਆਂ ਪ੍ਰਾਪਤੀਆਂ ਦਾ ਨਿੱਜਤਾ-ਸੁਰੱਖਿਅਤ ਸਾਰ ਹੈ। ਸਿਰਫ਼ ਕੁੱਲ ਅੰਕੜੇ ਦਿਖਾਏ ਜਾਂਦੇ ਹਨ।",
+                "Bars compare approved hours month by month. Only verified hours are counted.": "ਇਹ ਬਾਰ ਹਰ ਮਹੀਨੇ ਦੇ ਮਨਜ਼ੂਰ ਘੰਟਿਆਂ ਦੀ ਤੁਲਨਾ ਕਰਦੇ ਹਨ। ਸਿਰਫ਼ ਤਸਦੀਕ ਕੀਤੇ ਘੰਟੇ ਗਿਣੇ ਜਾਂਦੇ ਹਨ।",
+                "Every hour of service and every pantry contribution helps strengthen the community.": "ਸੇਵਾ ਦਾ ਹਰ ਘੰਟਾ ਅਤੇ ਪੈਂਟਰੀ ਲਈ ਹਰ ਯੋਗਦਾਨ ਭਾਈਚਾਰੇ ਨੂੰ ਮਜ਼ਬੂਤ ਬਣਾਉਂਦਾ ਹੈ।",
+                "See only the Sevas you have signed up for in a personal calendar.": "ਆਪਣੇ ਨਿੱਜੀ ਕੈਲੰਡਰ ਵਿੱਚ ਸਿਰਫ਼ ਉਹ ਸੇਵਾਵਾਂ ਵੇਖੋ ਜਿਨ੍ਹਾਂ ਲਈ ਤੁਸੀਂ ਸਾਈਨ ਅੱਪ ਕੀਤਾ ਹੈ।",
+                "See the community's verified service hours, volunteer participation, and pantry donation activity.": "ਭਾਈਚਾਰੇ ਦੇ ਤਸਦੀਕ ਕੀਤੇ ਸੇਵਾ ਘੰਟੇ, ਵਲੰਟੀਅਰਾਂ ਦੀ ਭਾਗੀਦਾਰੀ ਅਤੇ ਪੈਂਟਰੀ ਦਾਨ ਦੀ ਗਤੀਵਿਧੀ ਵੇਖੋ।",
+                "Stay updated on Hola Mahalla, Vaisakhi, and other special community gatherings.": "ਹੋਲਾ ਮਹੱਲਾ, ਵਿਸਾਖੀ ਅਤੇ ਹੋਰ ਖ਼ਾਸ ਭਾਈਚਾਰਕ ਸਮਾਗਮਾਂ ਬਾਰੇ ਜਾਣਕਾਰੀ ਲੈਂਦੇ ਰਹੋ।",
+                "Add and maintain upcoming community events.": "ਆਉਣ ਵਾਲੇ ਭਾਈਚਾਰਕ ਸਮਾਗਮ ਸ਼ਾਮਲ ਕਰੋ ਅਤੇ ਉਨ੍ਹਾਂ ਦੀ ਜਾਣਕਾਰੀ ਅੱਪਡੇਟ ਰੱਖੋ।",
+                "Describe the event...": "ਸਮਾਗਮ ਦਾ ਵੇਰਵਾ ਦਿਓ...",
+                "Describe the seva opportunity...": "ਸੇਵਾ ਦੇ ਮੌਕੇ ਦਾ ਵੇਰਵਾ ਦਿਓ...",
+                "Create seva opportunities and review completed service hours.": "ਸੇਵਾ ਦੇ ਮੌਕੇ ਬਣਾਓ ਅਤੇ ਪੂਰੇ ਕੀਤੇ ਸੇਵਾ ਘੰਟਿਆਂ ਦੀ ਸਮੀਖਿਆ ਕਰੋ।",
+                "No events created yet.": "ਹਾਲੇ ਕੋਈ ਸਮਾਗਮ ਨਹੀਂ ਬਣਾਇਆ ਗਿਆ।",
+                "No events found": "ਕੋਈ ਸਮਾਗਮ ਨਹੀਂ ਮਿਲਿਆ",
+                "No activity has been recorded yet. New actions will appear here.": "ਹਾਲੇ ਕੋਈ ਗਤੀਵਿਧੀ ਦਰਜ ਨਹੀਂ ਹੋਈ। ਨਵੀਆਂ ਕਾਰਵਾਈਆਂ ਇੱਥੇ ਦਿਖਾਈ ਦੇਣਗੀਆਂ।",
+                "Choose a limit such as 10 or 15. Enter 0 for unlimited signups.": "10 ਜਾਂ 15 ਵਰਗੀ ਹੱਦ ਚੁਣੋ। ਬੇਹੱਦ ਸਾਈਨ-ਅੱਪ ਲਈ 0 ਦਰਜ ਕਰੋ।",
+                "Your first milestone will appear after your first approved Seva.": "ਤੁਹਾਡਾ ਪਹਿਲਾ ਮੀਲ ਪੱਥਰ ਪਹਿਲੀ ਸੇਵਾ ਮਨਜ਼ੂਰ ਹੋਣ ਤੋਂ ਬਾਅਦ ਦਿਖਾਈ ਦੇਵੇਗਾ।",
+                "Ask about Smart Seva…": "Smart Seva ਬਾਰੇ ਪੁੱਛੋ…",
+                "Food, cleanup, community...": "ਭੋਜਨ, ਸਫ਼ਾਈ, ਭਾਈਚਾਰਾ...",
+                "Gurdwara, Fremont...": "ਗੁਰਦੁਆਰਾ, ਫ੍ਰੀਮਾਂਟ...",
+                "Rice, lentils, flour...": "ਚੌਲ, ਦਾਲਾਂ, ਆਟਾ...",
+                "Gurdwara name and city": "ਗੁਰਦੁਆਰੇ ਦਾ ਨਾਮ ਅਤੇ ਸ਼ਹਿਰ",
+                "Details about this paath": "ਇਸ ਪਾਠ ਬਾਰੇ ਵੇਰਵੇ"
             }};
             const button = document.querySelector(".translate-button");
             if (button) {{
@@ -1863,11 +1911,12 @@ def layout(content, title="Smart Seva"):
                 const original = node.nodeValue;
                 const leading = (original.match(/^\\s*/) || [""])[0];
                 const trailing = (original.match(/\\s*$/) || [""])[0];
-                let visible = original.trim().replace(/\\s+/g, " ");
-                keys.forEach(key => {{
-                    visible = visible.split(key).join(dictionary[key]);
-                }});
-                node.nodeValue = leading + visible + trailing;
+                const visible = original.trim().replace(/\\s+/g, " ");
+                // Translate a complete text node only. Replacing short words
+                // inside a sentence created the English/Punjabi mixtures.
+                if (dictionary[visible]) {{
+                    node.nodeValue = leading + dictionary[visible] + trailing;
+                }}
             }}
             const labels = {{
                 "Translate this page to Punjabi": "ਇਸ ਪੰਨੇ ਦਾ ਪੰਜਾਬੀ ਵਿੱਚ ਅਨੁਵਾਦ ਕਰੋ",
