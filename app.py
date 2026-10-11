@@ -1629,7 +1629,16 @@ def layout(content, title="Smart Seva"):
                     headers: {{"Content-Type": "application/json"}},
                     body: JSON.stringify({{texts: texts, target: "pa"}})
                 }});
-                const data = await response.json();
+                const responseText = await response.text();
+                let data;
+                try {{
+                    data = JSON.parse(responseText);
+                }} catch (parseError) {{
+                    if (response.redirected || responseText.trim().startsWith("<")) {{
+                        throw new Error("Smart Seva returned a webpage instead of translation data. Please refresh the page and try again.");
+                    }}
+                    throw new Error("The translation service returned an unreadable response. Please try again.");
+                }}
                 if (!response.ok) throw new Error(data.error || "Translation failed.");
 
                 if (Array.isArray(data.translations)) {{
@@ -1660,7 +1669,6 @@ def layout(content, title="Smart Seva"):
 # ============================================================
 
 @app.route("/api/translate", methods=["POST"])
-@login_required
 def translate_api():
     """Translate page text into Punjabi using MyMemory's free translation endpoint."""
     payload = request.get_json(silent=True) or {}
