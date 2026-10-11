@@ -1857,9 +1857,17 @@ def layout(content, title="Smart Seva"):
             }});
             let node;
             while ((node = walker.nextNode())) {{
+                // HTML templates often insert line breaks/indentation inside
+                // text nodes. Normalize internal whitespace so full phrases
+                // can match instead of translating only isolated words.
+                const original = node.nodeValue;
+                const leading = (original.match(/^\\s*/) || [""])[0];
+                const trailing = (original.match(/\\s*$/) || [""])[0];
+                let visible = original.trim().replace(/\\s+/g, " ");
                 keys.forEach(key => {{
-                    node.nodeValue = node.nodeValue.split(key).join(dictionary[key]);
+                    visible = visible.split(key).join(dictionary[key]);
                 }});
+                node.nodeValue = leading + visible + trailing;
             }}
             const labels = {{
                 "Translate this page to Punjabi": "ਇਸ ਪੰਨੇ ਦਾ ਪੰਜਾਬੀ ਵਿੱਚ ਅਨੁਵਾਦ ਕਰੋ",
