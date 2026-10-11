@@ -1969,7 +1969,7 @@ def layout(content, title="Smart Seva"):
                         }} catch (error) {{ failed = true; }}
                     }}));
                 }}
-            }
+            }}
             if (failed) {{
                 console.warn("Some text could not be translated by the public Google endpoint; dictionary translations were used where available.");
             }}
