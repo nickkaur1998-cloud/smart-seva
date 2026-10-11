@@ -215,6 +215,33 @@ def init_db():
             )
         """)
         db.execute("CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications(user_id, is_read, created_at DESC)")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS seva_waitlist (
+                id BIGSERIAL PRIMARY KEY,
+                seva_id BIGINT NOT NULL REFERENCES seva(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+                status TEXT NOT NULL DEFAULT 'waiting',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (seva_id, user_id)
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS seva_waitlist_next_idx ON seva_waitlist(seva_id, status, created_at, id)")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS activity_log (
+                id BIGSERIAL PRIMARY KEY,
+                actor_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+                actor_name TEXT NOT NULL,
+                actor_email TEXT,
+                action TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT,
+                details TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS activity_log_created_idx ON activity_log(created_at DESC, id DESC)")
+        db.execute("ALTER TABLE pantry_need_signups ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'committed'")
+        db.execute("ALTER TABLE pantry_need_signups ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ")
         db.commit()
 
         role_emails = {
@@ -486,6 +513,23 @@ def notify_user(user_id, title, message, link=None):
         db.commit()
     finally:
         db.close()
+
+
+def log_activity(db, actor, action, entity_type, entity_id=None, details=None):
+    """Append an audit event; never store passwords or payment secrets."""
+    actor_id = actor["id"] if actor else None
+    actor_name = clean(actor.get("name") if actor else "System", 200) or "System"
+    actor_email = clean(actor.get("email") if actor else "", 320) or None
+    db.execute(
+        """
+        INSERT INTO activity_log
+            (actor_id, actor_name, actor_email, action, entity_type, entity_id, details)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (actor_id, actor_name, actor_email, clean(action, 100),
+         clean(entity_type, 100), str(entity_id) if entity_id is not None else None,
+         json.dumps(details or {}, ensure_ascii=False))
+    )
 
 
 def seva_end_passed(date_value, end_time_value):
@@ -1134,6 +1178,16 @@ iframe.goog-te-banner-frame,
 .seva-bot-form{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(215,168,62,.22);background:#080d19}.seva-bot-form input{margin:0;min-width:0;flex:1;background:#111a31;color:white;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:10px}.seva-bot-form button{margin:0!important;padding:9px 12px!important}.seva-bot-note{font-size:10px;color:#94a3b8;padding:0 12px 10px}
 @media(max-width:520px){.seva-bot-launcher{right:14px;bottom:14px}.seva-bot-panel{right:10px;bottom:76px;width:calc(100vw - 20px);height:min(70vh,540px)}}
 
+
+/* Accessibility: visible focus, reduced motion, scalable text, and skip navigation. */
+:focus-visible { outline: 3px solid #ffe7a1 !important; outline-offset: 3px; }
+.skip-link { position:absolute; left:12px; top:-100px; z-index:10000; padding:12px 16px; background:#ffe7a1; color:#111; border-radius:8px; }
+.skip-link:focus { top:12px; }
+body.large-text { font-size: 1.12rem; }
+body.large-text p, body.large-text label, body.large-text input, body.large-text select, body.large-text textarea, body.large-text button, body.large-text td, body.large-text th { font-size: 1.08em; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
+}
 </style>
 """
 
@@ -1191,6 +1245,7 @@ def layout(content, title="Smart Seva"):
                 <a href="/admin/paath">Manage Paath</a>
                 <a href="/admin/pantry">Manage Pantry</a>
                 <a href="/admin/events">Manage Events</a>
+                <a href="/admin/activity-log">Activity Log</a>
                 <a href="/my-calendar">My Calendar</a>
                 <a href="/impact">Community Impact</a>
                 <a href="/logout">Logout</a>
@@ -1356,7 +1411,8 @@ def layout(content, title="Smart Seva"):
             <span class="ik-constellation ik-three">ੴ</span>
         </div>
 
-        <nav>
+        <a class="skip-link" href="#main-content">Skip to main content</a>
+        <nav aria-label="Main navigation">
 
             <div class="logo">
                 <span class="logo-mark" aria-label="Ik Onkar">ੴ</span>
@@ -1368,7 +1424,9 @@ def layout(content, title="Smart Seva"):
             <div class="nav-actions">
                 {nav}
                 <button type="button" class="qr-menu-button" onclick="openQrModal()" aria-label="Show QR code for Smart Seva">QR Code</button>
-                <button type="button" class="translate-button dark-button" onclick="translatePageToPunjabi()">ਪੰਜਾਬੀ</button>
+                <button type="button" class="dark-button" id="text-size-toggle" onclick="toggleTextSize()" aria-pressed="false" aria-label="Toggle larger text">A+ Text</button>
+                <button type="button" class="translate-button dark-button" onclick="translatePageToPunjabi()" aria-label="Translate this page to Punjabi">ਪੰਜਾਬੀ</button>
+                <button type="button" class="dark-button" onclick="showEnglish()" aria-label="Return to English">English</button>
             </div>
 
         </nav>
@@ -1400,7 +1458,9 @@ def layout(content, title="Smart Seva"):
         }});
         </script>
 
+        <main id="main-content" tabindex="-1">
         {content}
+        </main>
 
         {seva_bot_widget}
 
@@ -1408,6 +1468,25 @@ def layout(content, title="Smart Seva"):
             ੴ • Seva • Sangat • Chardi Kala
         </footer>
         <script>
+        function toggleTextSize() {{
+            const enabled = document.body.classList.toggle("large-text");
+            const button = document.getElementById("text-size-toggle");
+            if (button) {{
+                button.setAttribute("aria-pressed", enabled ? "true" : "false");
+                button.textContent = enabled ? "A− Text" : "A+ Text";
+            }}
+            try {{ localStorage.setItem("smart-seva-large-text", enabled ? "1" : "0"); }} catch (e) {{}}
+        }}
+        (function restoreTextSize() {{
+            try {{
+                if (localStorage.getItem("smart-seva-large-text") === "1") {{
+                    document.body.classList.add("large-text");
+                    const button = document.getElementById("text-size-toggle");
+                    if (button) {{ button.setAttribute("aria-pressed", "true"); button.textContent = "A− Text"; }}
+                }}
+            }} catch (e) {{}}
+        }})();
+        function showEnglish() {{ window.location.reload(); }}
         async function translatePageToPunjabi() {{
             const button = document.querySelector(".translate-button");
             if (button) {{
@@ -1860,7 +1939,7 @@ def seva():
     sort = clean(request.args.get("sort", "soonest"), 20)
 
     where = []
-    params = [user["id"]]
+    params = [user["id"], user["id"]]
 
     if q:
         where.append("(lower(seva.title) LIKE lower(?) OR lower(seva.description) LIKE lower(?) OR lower(seva.location) LIKE lower(?))")
@@ -1890,9 +1969,11 @@ def seva():
         f"""
         SELECT seva.*,
                signups.id AS signup_id,
-               (SELECT COUNT(*) FROM signups s2 WHERE s2.seva_id = seva.id AND s2.status != 'rejected') AS signup_count
+               seva_waitlist.status AS waitlist_status,
+               (SELECT COUNT(*) FROM signups s2 WHERE s2.seva_id = seva.id AND s2.status NOT IN ('rejected', 'cancelled')) AS signup_count
         FROM seva
         LEFT JOIN signups ON seva.id = signups.seva_id AND signups.user_id = ?
+        LEFT JOIN seva_waitlist ON seva_waitlist.seva_id = seva.id AND seva_waitlist.user_id = ? AND seva_waitlist.status = 'waiting'
         {where_sql}
         ORDER BY {order_sql}
         """,
@@ -1919,7 +2000,13 @@ def seva():
         elif item["signup_id"]:
             action = '<span class="success">✓ Signed Up</span>'
         elif full:
-            action = '<span class="warning">Full — no spots remaining</span>'
+            if item["waitlist_status"] == "waiting":
+                action = '<span class="warning" role="status">⏳ You are on the waitlist</span>'
+            else:
+                action = f"""<form method="POST" action="/signup/{item["id"]}">
+                    <input type="hidden" name="csrf_token" value="{token}">
+                    <button aria-label="Join waitlist for {h(item["title"])}">Join Waitlist</button>
+                </form>"""
         else:
             action = f"""
             <form method="POST" action="/signup/{item["id"]}">
@@ -2497,8 +2584,16 @@ def signup(seva_id):
         abort(400, "This Seva is closed because its end time has passed.")
 
     if seva_item["max_volunteers"] and seva_item["signup_count"] >= seva_item["max_volunteers"]:
-        db.close()
-        abort(400, "This Seva is full.")
+        try:
+            db.execute("""INSERT INTO seva_waitlist (seva_id, user_id, status, created_at)
+                          VALUES (?, ?, 'waiting', ?) ON CONFLICT (seva_id, user_id) DO NOTHING""",
+                       (seva_id, user["id"], utc_now()))
+            log_activity(db, user, "joined waitlist", "seva", seva_id, {"title": seva_item["title"]})
+            db.commit()
+        finally:
+            db.close()
+        notify_user(user["id"], "Added to Seva waitlist", f"You are on the waitlist for {seva_item['title']}. If a spot opens, Smart Seva will notify you.", "/seva")
+        return redirect(url_for("seva"))
 
     try:
 
@@ -2520,6 +2615,8 @@ def signup(seva_id):
             )
         )
 
+        log_activity(db, user, "signed up", "seva", seva_id, {"title": seva_item["title"]})
+        db.execute("UPDATE seva_waitlist SET status = 'promoted' WHERE seva_id = ? AND user_id = ? AND status = 'waiting'", (seva_id, user["id"]))
         db.commit()
         notify_user(user["id"], "Seva signup confirmed", f"You signed up for {seva_item['title']}.", "/dashboard")
 
@@ -2531,6 +2628,51 @@ def signup(seva_id):
     return redirect(
         url_for("seva")
     )
+
+
+@app.route("/cancel-signup/<int:signup_id>", methods=["POST"])
+@login_required
+def cancel_signup(signup_id):
+    validate_csrf()
+    user = current_user()
+    if user["role"] != "student":
+        abort(403)
+    db = get_db()
+    signup = db.execute("""
+        SELECT signups.id, signups.seva_id, signups.user_id, signups.status,
+               signups.check_in, seva.title, seva.date, seva.max_volunteers
+        FROM signups JOIN seva ON seva.id = signups.seva_id
+        WHERE signups.id = ? AND signups.user_id = ?
+    """, (signup_id, user["id"])).fetchone()
+    if not signup:
+        db.close()
+        abort(404)
+    if signup["status"] != "pending" or signup["check_in"] or str(signup["date"]) < datetime.now(APP_TIMEZONE).date().isoformat():
+        db.close()
+        abort(400, "Only future signups that have not been checked in can be cancelled.")
+    db.execute("DELETE FROM signups WHERE id = ?", (signup_id,))
+    log_activity(db, user, "cancelled signup", "seva", signup["seva_id"], {"title": signup["title"]})
+    promoted_user_id = None
+    if signup["max_volunteers"]:
+        occupied = int(db.execute("SELECT COUNT(*) AS count FROM signups WHERE seva_id = ? AND status NOT IN ('rejected', 'cancelled')",
+                                  (signup["seva_id"],)).fetchone()["count"] or 0)
+        if occupied < int(signup["max_volunteers"]):
+            waiting = db.execute("""SELECT * FROM seva_waitlist WHERE seva_id = ? AND status = 'waiting'
+                                    ORDER BY created_at ASC, id ASC LIMIT 1 FOR UPDATE""",
+                                  (signup["seva_id"],)).fetchone()
+            if waiting:
+                db.execute("INSERT INTO signups (user_id, seva_id, status, created_at) VALUES (?, ?, 'pending', ?)",
+                           (waiting["user_id"], signup["seva_id"], utc_now()))
+                db.execute("UPDATE seva_waitlist SET status = 'promoted' WHERE id = ?", (waiting["id"],))
+                log_activity(db, user, "promoted waitlisted volunteer", "seva", signup["seva_id"],
+                             {"waitlist_user_id": str(waiting["user_id"]), "title": signup["title"]})
+                promoted_user_id = waiting["user_id"]
+    db.commit()
+    db.close()
+    if promoted_user_id:
+        notify_user(promoted_user_id, "A Seva spot opened for you",
+                    f"You have been moved from the waitlist into the signup list for {signup['title']}.", "/dashboard")
+    return redirect(url_for("dashboard"))
 
 
 # ============================================================
@@ -2768,7 +2910,7 @@ def pantry_needs():
         FROM pantry_needs
         LEFT JOIN pantry_need_signups
             ON pantry_need_signups.need_id = pantry_needs.id
-            AND pantry_need_signups.status = 'committed'
+            AND pantry_need_signups.status IN ('committed', 'delivered', 'received')
         LEFT JOIN pantry_need_signups AS own_signup
             ON own_signup.need_id = pantry_needs.id
             AND own_signup.user_id = ?
@@ -2874,7 +3016,7 @@ def pantry_signup(need_id):
         """
         SELECT COALESCE(SUM(quantity), 0) AS total
         FROM pantry_need_signups
-        WHERE need_id = ? AND status = 'committed'
+        WHERE need_id = ? AND status IN ('committed', 'delivered', 'received')
         """,
         (need_id,)
     ).fetchone()["total"]
@@ -2913,6 +3055,12 @@ def pantry_signup(need_id):
             (need_id, user["id"], converted_quantity, utc_now())
         )
         db.commit()
+        log_db = get_db()
+        try:
+            log_activity(log_db, user, "pledged pantry item", "pantry_need", need_id, {"quantity": format_quantity(converted_quantity), "unit": requested_unit})
+            log_db.commit()
+        finally:
+            log_db.close()
     except IntegrityError:
         db.close()
         abort(400, "You have already signed up for this ingredient.")
@@ -2932,7 +3080,7 @@ def admin_pantry():
         FROM pantry_needs
         LEFT JOIN pantry_need_signups
             ON pantry_need_signups.need_id = pantry_needs.id
-            AND pantry_need_signups.status = 'committed'
+            AND pantry_need_signups.status IN ('committed', 'delivered', 'received')
         GROUP BY pantry_needs.id
         ORDER BY pantry_needs.status, pantry_needs.needed_by ASC, pantry_needs.id DESC
         """
@@ -2961,10 +3109,16 @@ def admin_pantry():
         <tr><td>{h(need["ingredient"])}</td><td><strong>{format_quantity(remaining)} {h(display_unit)} still needed</strong></td><td>{h(need["needed_by"] or "-")}</td><td>{h(need["status"].title())}</td><td>{action}</td></tr>
         """
 
-    signup_rows = "".join(
-        f"<tr><td>{h(item['student_name'])}<br><span class='small'>{h(item['student_email'])}</span></td><td>{h(item['ingredient'])}</td><td>{format_quantity(item['quantity'])} {h(canonical_unit(item['unit']))}</td><td>{h(item['status'].title())}</td></tr>"
-        for item in signups
-    )
+    signup_rows = ""
+    for item in signups:
+        status = item["status"] or "committed"
+        if status == "committed":
+            action_html = f"<form method='POST' action='/admin/pantry/signup/{item['id']}/delivered'><input type='hidden' name='csrf_token' value='{token}'><button>Mark Delivered</button></form>"
+        elif status == "delivered":
+            action_html = f"<form method='POST' action='/admin/pantry/signup/{item['id']}/received'><input type='hidden' name='csrf_token' value='{token}'><button>Confirm Received</button></form>"
+        else:
+            action_html = "<span class='success'>✓ Complete</span>"
+        signup_rows += f"<tr><td>{h(item['student_name'])}<br><span class='small'>{h(item['student_email'])}</span></td><td>{h(item['ingredient'])}</td><td>{format_quantity(item['quantity'])} {h(canonical_unit(item['unit']))}</td><td>{h(status.title())}</td><td>{action_html}</td></tr>"
 
     return layout(
         f"""
@@ -2996,7 +3150,7 @@ def admin_pantry():
                 </form>
             </div>
             <div class="card"><h2>Published needs</h2><div style="overflow-x:auto"><table><tr><th>Ingredient</th><th>Remaining</th><th>Bring by</th><th>Status</th><th>Action</th></tr>{need_rows or '<tr><td colspan="5">No ingredient needs published yet.</td></tr>'}</table></div></div>
-            <div class="card"><h2>Student signups</h2><div style="overflow-x:auto"><table><tr><th>Student</th><th>Ingredient</th><th>Quantity</th><th>Status</th></tr>{signup_rows or '<tr><td colspan="4">No student signups yet.</td></tr>'}</table></div></div>
+            <div class="card"><h2>Pantry fulfillment tracker</h2><p class="muted">Track pledged ingredients from commitment to delivery and receipt.</p><div style="overflow-x:auto"><table><tr><th>Student</th><th>Ingredient</th><th>Quantity</th><th>Status</th><th>Update</th></tr>{signup_rows or '<tr><td colspan="5">No student signups yet.</td></tr>'}</table></div></div>
         </div>
         """,
         "Manage Pantry Needs"
@@ -3035,6 +3189,7 @@ def create_pantry_need():
         """,
         (ingredient, quantity_needed, unit, details, needed_by, user["id"], utc_now())
     )
+    log_activity(db, user, "created pantry need", "pantry_need", None, {"ingredient": ingredient, "quantity": format_quantity(quantity_needed), "unit": unit})
     db.commit()
     db.close()
     return redirect(url_for("admin_pantry"))
@@ -3043,10 +3198,42 @@ def create_pantry_need():
 @app.route("/admin/pantry/archive/<int:need_id>", methods=["POST"])
 @pantry_admin_required
 def archive_pantry_need(need_id):
-
     validate_csrf()
+    user = current_user()
     db = get_db()
     db.execute("UPDATE pantry_needs SET status = 'archived' WHERE id = ?", (need_id,))
+    log_activity(db, user, "archived pantry need", "pantry_need", need_id)
+    db.commit()
+    db.close()
+    return redirect(url_for("admin_pantry"))
+
+
+@app.route("/admin/pantry/signup/<int:signup_id>/<status>", methods=["POST"])
+@pantry_admin_required
+def update_pantry_fulfillment(signup_id, status):
+    validate_csrf()
+    if status not in {"delivered", "received"}:
+        abort(400, "Invalid fulfillment status.")
+    user = current_user()
+    db = get_db()
+    item = db.execute(
+        "SELECT id, need_id, status FROM pantry_need_signups WHERE id = ?",
+        (signup_id,)
+    ).fetchone()
+    if not item:
+        db.close()
+        abort(404)
+    if status == "delivered" and item["status"] != "committed":
+        db.close()
+        abort(400, "Only committed pantry pledges can be marked delivered.")
+    if status == "received" and item["status"] != "delivered":
+        db.close()
+        abort(400, "Only delivered pantry pledges can be confirmed received.")
+    db.execute(
+        "UPDATE pantry_need_signups SET status = ?, received_at = CASE WHEN ? = 'received' THEN NOW() ELSE received_at END WHERE id = ?",
+        (status, status, signup_id)
+    )
+    log_activity(db, user, "updated pantry fulfillment", "pantry_signup", signup_id, {"from": item["status"], "to": status, "need_id": item["need_id"]})
     db.commit()
     db.close()
     return redirect(url_for("admin_pantry"))
@@ -3516,6 +3703,14 @@ def dashboard():
 
             if not item["check_in"]:
 
+                cancel_form = ""
+                if str(item["date"]) >= datetime.now(APP_TIMEZONE).date().isoformat():
+                    cancel_form = f"""
+                    <form method="POST" action="/cancel-signup/{item["id"]}" onsubmit="return confirm('Cancel this Seva signup?');">
+                        <input type="hidden" name="csrf_token" value="{token}">
+                        <button type="submit" class="danger">Cancel Signup</button>
+                    </form>
+                    """
                 action = f"""
                 <form
                     method="POST"
@@ -3533,6 +3728,7 @@ def dashboard():
                     </button>
 
                 </form>
+                {cancel_form}
                 """
 
             elif not item["check_out"]:
@@ -3997,6 +4193,7 @@ def checkin(signup_id):
         )
     )
 
+    log_activity(db, user, "checked in", "signup", signup_id, {"seva_id": signup["seva_id"]})
     db.commit()
     db.close()
 
@@ -4089,6 +4286,7 @@ def checkout(signup_id):
         )
     )
 
+    log_activity(db, user, "checked out", "signup", signup_id, {"hours": hours})
     db.commit()
     db.close()
 
@@ -4997,6 +5195,55 @@ def admin_seva():
 
 
 # ============================================================
+# CENTRAL ADMIN ACTIVITY LOG
+# ============================================================
+
+@app.route("/admin/activity-log")
+@admin_required
+def admin_activity_log():
+    """Central-admin-only record of important actions across Smart Seva."""
+    try:
+        page = max(1, min(100000, int(request.args.get("page", "1"))))
+    except (TypeError, ValueError):
+        page = 1
+    page_size = 100
+    offset = (page - 1) * page_size
+    db = get_db()
+    total = int(db.execute("SELECT COUNT(*) AS count FROM activity_log").fetchone()["count"] or 0)
+    entries = db.execute(
+        """
+        SELECT id, actor_name, actor_email, action, entity_type, entity_id, details, created_at
+        FROM activity_log ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
+        """, (page_size, offset)
+    ).fetchall()
+    db.close()
+    rows = ""
+    for entry in entries:
+        try:
+            details = json.loads(entry["details"] or "{}")
+        except (TypeError, ValueError):
+            details = {}
+        detail_text = "; ".join("{}: {}".format(clean(k, 80), clean(v, 240)) for k, v in details.items())
+        rows += (
+            f"<tr><td>{h(entry['created_at'])}</td>"
+            f"<td>{h(entry['actor_name'])}<br><span class='small'>{h(entry['actor_email'] or '')}</span></td>"
+            f"<td>{h(entry['action'])}</td><td>{h(entry['entity_type'])} {h(entry['entity_id'] or '')}</td>"
+            f"<td>{h(detail_text)}</td></tr>"
+        )
+    if not rows:
+        rows = "<tr><td colspan='5'>No activity has been recorded yet. New actions will appear here.</td></tr>"
+    prev = f'<a class="button dark-button" href="/admin/activity-log?page={page-1}">← Newer</a>' if page > 1 else ""
+    nxt = f'<a class="button dark-button" href="/admin/activity-log?page={page+1}">Older →</a>' if offset + page_size < total else ""
+    return layout(f"""
+      <div class="container"><h1>Central Admin · Activity Log</h1>
+      <p class="muted">Timestamped record of who performed important actions and what changed. Restricted to central admins.</p>
+      <div class="card"><p><strong>{total}</strong> recorded actions · Page {page}</p>
+      <div style="overflow-x:auto"><table><thead><tr><th>When (UTC)</th><th>Who</th><th>Action</th><th>Item</th><th>Details</th></tr></thead>
+      <tbody>{rows}</tbody></table></div><div class="filter-actions">{prev}{nxt}</div></div></div>
+      """, "Central Admin Activity Log")
+
+
+# ============================================================
 # ADMIN DASHBOARD
 # ============================================================
 
@@ -5830,6 +6077,8 @@ def create_seva():
         )
     )
 
+    log_activity(db, user, "created Seva opportunity", "seva", None,
+                 {"title": title, "date": date, "location": location, "capacity": max_volunteers})
     db.commit()
     db.close()
 
@@ -5852,15 +6101,11 @@ def delete_seva(seva_id):
     validate_csrf()
 
     db = get_db()
-
-    db.execute(
-        """
-        DELETE FROM seva
-        WHERE id = ?
-        """,
-        (seva_id,)
-    )
-
+    user = current_user()
+    old_item = db.execute("SELECT title FROM seva WHERE id = ?", (seva_id,)).fetchone()
+    db.execute("DELETE FROM seva WHERE id = ?", (seva_id,))
+    log_activity(db, user, "deleted Seva opportunity", "seva", seva_id,
+                 {"title": old_item["title"] if old_item else "unknown"})
     db.commit()
     db.close()
 
@@ -5908,17 +6153,10 @@ def approve_signup(signup_id):
             "Student has not checked out yet."
         )
 
-    db.execute(
-        """
-        UPDATE signups
-
-        SET status = 'approved'
-
-        WHERE id = ?
-        """,
-        (signup_id,)
-    )
-
+    user = current_user()
+    db.execute("UPDATE signups SET status = 'approved' WHERE id = ?", (signup_id,))
+    log_activity(db, user, "approved Seva hours", "signup", signup_id,
+                 {"user_id": str(signup["user_id"]), "hours": float(signup["hours"] or 0)})
     db.commit()
     notify_user(signup["user_id"], "Seva hours approved", "Your completed Seva hours have been approved.", "/dashboard")
     db.close()
@@ -5958,17 +6196,10 @@ def reject_signup(signup_id):
 
         abort(404)
 
-    db.execute(
-        """
-        UPDATE signups
-
-        SET status = 'rejected'
-
-        WHERE id = ?
-        """,
-        (signup_id,)
-    )
-
+    user = current_user()
+    db.execute("UPDATE signups SET status = 'rejected' WHERE id = ?", (signup_id,))
+    log_activity(db, user, "rejected Seva hours", "signup", signup_id,
+                 {"user_id": str(signup["user_id"])})
     db.commit()
     notify_user(signup["user_id"], "Seva hours rejected", "Your completed Seva hours were not approved. Please contact the administrator if you need clarification.", "/dashboard")
     db.close()
