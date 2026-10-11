@@ -1328,12 +1328,7 @@ def layout(content, title="Smart Seva"):
             """
         elif user["role"] == "seva_admin":
             nav = """
-                <details class="nav-dropdown">
-                    <summary>Manage</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/admin/seva">Manage Seva</a>
-                    </div>
-                </details>
+                <a href="/admin/seva">Manage Seva</a>
                 <details class="nav-dropdown">
                     <summary>Explore</summary>
                     <div class="nav-dropdown-menu">
@@ -1352,12 +1347,7 @@ def layout(content, title="Smart Seva"):
             """
         elif user["role"] == "paath_admin":
             nav = """
-                <details class="nav-dropdown">
-                    <summary>Manage</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/admin/paath">Manage Paath</a>
-                    </div>
-                </details>
+                <a href="/admin/paath">Manage Paath</a>
                 <details class="nav-dropdown">
                     <summary>Explore</summary>
                     <div class="nav-dropdown-menu">
@@ -1376,12 +1366,7 @@ def layout(content, title="Smart Seva"):
             """
         elif user["role"] == "pantry_admin":
             nav = """
-                <details class="nav-dropdown">
-                    <summary>Manage</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/admin/pantry">Manage Pantry</a>
-                    </div>
-                </details>
+                <a href="/admin/pantry">Manage Pantry</a>
                 <details class="nav-dropdown">
                     <summary>Explore</summary>
                     <div class="nav-dropdown-menu">
@@ -1400,12 +1385,7 @@ def layout(content, title="Smart Seva"):
             """
         elif user["role"] == "events_admin":
             nav = """
-                <details class="nav-dropdown">
-                    <summary>Manage</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/admin/events">Manage Events</a>
-                    </div>
-                </details>
+                <a href="/admin/events">Manage Events</a>
                 <details class="nav-dropdown">
                     <summary>Community</summary>
                     <div class="nav-dropdown-menu">
