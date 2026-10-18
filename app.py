@@ -5673,91 +5673,155 @@ def download_certificate(verification_code):
     pdf = canvas.Canvas(buffer, pagesize=letter)
     width, height = letter
 
-    # Formal, print-friendly certificate: warm ivory paper, navy typography, and gold rules.
+    # Formal award layout: ivory stock, layered gilded frame, and script typography.
     pdf.setTitle("Smart Seva Certificate of Seva")
     pdf.setAuthor("Smart Seva")
     pdf.setSubject("Verified community service contribution")
 
-    pdf.setFillColorRGB(0.985, 0.978, 0.945)
+    navy = (0.055, 0.12, 0.22)
+    gold = (0.72, 0.53, 0.17)
+    pale_gold = (0.88, 0.76, 0.47)
+    slate = (0.27, 0.32, 0.39)
+    ivory = (0.992, 0.982, 0.948)
+
+    pdf.setFillColorRGB(*ivory)
     pdf.rect(0, 0, width, height, fill=1, stroke=0)
 
-    # Double-line frame with understated corner accents.
-    pdf.setStrokeColorRGB(0.08, 0.16, 0.28)
-    pdf.setLineWidth(2.2)
-    pdf.rect(30, 30, width - 60, height - 60, fill=0, stroke=1)
-    pdf.setStrokeColorRGB(0.78, 0.60, 0.22)
-    pdf.setLineWidth(1)
+    # Three-layer gilded border with dark inner keyline.
+    pdf.setStrokeColorRGB(*gold)
+    pdf.setLineWidth(3.2)
+    pdf.rect(25, 25, width - 50, height - 50, fill=0, stroke=1)
+    pdf.setStrokeColorRGB(*navy)
+    pdf.setLineWidth(0.8)
+    pdf.rect(33, 33, width - 66, height - 66, fill=0, stroke=1)
+    pdf.setStrokeColorRGB(*pale_gold)
+    pdf.setLineWidth(1.2)
     pdf.rect(40, 40, width - 80, height - 80, fill=0, stroke=1)
 
-    navy = (0.08, 0.16, 0.28)
-    gold = (0.68, 0.48, 0.12)
-    slate = (0.27, 0.32, 0.39)
+    # Decorative corner flourishes: diamonds, fine rays, and gold dots.
+    corner_points = [(52, 52, 1, 1), (width - 52, 52, -1, 1),
+                     (52, height - 52, 1, -1), (width - 52, height - 52, -1, -1)]
+    for cx, cy, sx, sy in corner_points:
+        pdf.setStrokeColorRGB(*gold)
+        pdf.setLineWidth(1.15)
+        p = pdf.beginPath()
+        p.moveTo(cx, cy + 18 * sy)
+        p.curveTo(cx, cy + 8 * sy, cx + 8 * sx, cy, cx + 18 * sx, cy)
+        pdf.drawPath(p, stroke=1, fill=0)
+        p = pdf.beginPath()
+        p.moveTo(cx + 3 * sx, cy + 12 * sy)
+        p.curveTo(cx + 3 * sx, cy + 5 * sy, cx + 5 * sx, cy + 3 * sy, cx + 12 * sx, cy + 3 * sy)
+        pdf.drawPath(p, stroke=1, fill=0)
+        pdf.setFillColorRGB(*gold)
+        pdf.saveState()
+        pdf.translate(cx + 5 * sx, cy + 5 * sy)
+        diamond = pdf.beginPath()
+        diamond.moveTo(0, 4)
+        diamond.lineTo(4, 0)
+        diamond.lineTo(0, -4)
+        diamond.lineTo(-4, 0)
+        diamond.close()
+        pdf.drawPath(diamond, stroke=0, fill=1)
+        pdf.restoreState()
 
-    pdf.setFillColorRGB(*gold)
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawCentredString(width / 2, height - 92, "SMART SEVA  |  COMMUNITY SERVICE")
-
+    # Small centered crest motif.
     pdf.setStrokeColorRGB(*gold)
-    pdf.setLineWidth(1.3)
-    pdf.line(145, height - 110, width - 145, height - 110)
+    pdf.setLineWidth(1)
+    pdf.line(width / 2 - 76, height - 78, width / 2 - 19, height - 78)
+    pdf.line(width / 2 + 19, height - 78, width / 2 + 76, height - 78)
+    pdf.setFillColorRGB(*gold)
+    pdf.circle(width / 2, height - 78, 3.5, fill=1, stroke=0)
+    pdf.setFillColorRGB(*navy)
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawCentredString(width / 2, height - 98, "SMART SEVA  •  COMMUNITY SERVICE")
+
+    pdf.setStrokeColorRGB(*pale_gold)
+    pdf.setLineWidth(1)
+    pdf.line(132, height - 119, width - 132, height - 119)
 
     pdf.setFillColorRGB(*navy)
-    pdf.setFont("Helvetica-Bold", 27)
-    pdf.drawCentredString(width / 2, height - 158, "CERTIFICATE")
-    pdf.setFont("Helvetica-Bold", 18)
-    pdf.drawCentredString(width / 2, height - 185, "OF SEVA")
+    pdf.setFont("ZapfChancery-MediumItalic", 34)
+    pdf.drawCentredString(width / 2, height - 165, "Certificate of Seva")
+    pdf.setFillColorRGB(*gold)
+    pdf.setFont("Helvetica-Bold", 9)
+    pdf.drawCentredString(width / 2, height - 188, "AWARD OF RECOGNITION")
 
     pdf.setFillColorRGB(*slate)
-    pdf.setFont("Helvetica", 12)
-    pdf.drawCentredString(width / 2, height - 230, "This certificate is proudly presented to")
+    pdf.setFont("Helvetica", 11.5)
+    pdf.drawCentredString(width / 2, height - 225, "This award is respectfully presented to")
 
     student_name = str(certificate_record["name"] or "Student").strip()
-    if len(student_name) > 34:
-        student_name = student_name[:31].rstrip() + "..."
+    if len(student_name) > 38:
+        student_name = student_name[:35].rstrip() + "..."
     pdf.setFillColorRGB(*navy)
-    pdf.setFont("Helvetica-Bold", 23 if len(student_name) < 25 else 18)
-    pdf.drawCentredString(width / 2, height - 278, student_name)
+    pdf.setFont("ZapfChancery-MediumItalic", 27 if len(student_name) < 25 else 21)
+    pdf.drawCentredString(width / 2, height - 270, student_name)
 
     pdf.setStrokeColorRGB(*gold)
-    pdf.setLineWidth(0.8)
-    pdf.line(110, height - 292, width - 110, height - 292)
+    pdf.setLineWidth(1.1)
+    pdf.line(105, height - 285, width - 105, height - 285)
 
     pdf.setFillColorRGB(*slate)
-    pdf.setFont("Helvetica", 12)
-    pdf.drawCentredString(width / 2, height - 326, "in recognition of verified community service")
-    pdf.drawCentredString(width / 2, height - 346, "contributed through Smart Seva.")
+    pdf.setFont("Helvetica", 11)
+    pdf.drawCentredString(width / 2, height - 314, "in grateful recognition of dedicated")
+    pdf.drawCentredString(width / 2, height - 331, "community service through Smart Seva")
 
     pdf.setFillColorRGB(*gold)
-    pdf.setFont("Helvetica-Bold", 29)
+    pdf.setFont("Helvetica-Bold", 27)
     pdf.drawCentredString(
-        width / 2, height - 405,
+        width / 2, height - 378,
         f'{round(float(certificate_record["hours"]), 2):g} HOURS'
     )
     pdf.setFillColorRGB(*slate)
-    pdf.setFont("Helvetica", 11)
-    pdf.drawCentredString(width / 2, height - 430, "of approved community seva")
+    pdf.setFont("Helvetica-Oblique", 10.5)
+    pdf.drawCentredString(width / 2, height - 400, "of approved community seva")
 
     try:
         issued_date = as_datetime(certificate_record["issued_at"]).strftime("%B %d, %Y")
     except (ValueError, TypeError):
         issued_date = str(certificate_record["issued_at"] or "Date not recorded")
 
-    pdf.setStrokeColorRGB(0.72, 0.72, 0.70)
-    pdf.line(82, 135, width - 82, 135)
-    pdf.setFillColorRGB(*navy)
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawString(82, 113, "ISSUED")
-    pdf.setFont("Helvetica", 10)
-    pdf.drawString(82, 96, issued_date)
+    # Two generous signature spaces for authorized representatives.
+    signature_y = 158
+    left_x1, left_x2 = 70, 272
+    right_x1, right_x2 = width - 272, width - 70
+    pdf.setStrokeColorRGB(*gold)
+    pdf.setLineWidth(0.9)
+    pdf.line(left_x1, signature_y, left_x2, signature_y)
+    pdf.line(right_x1, signature_y, right_x2, signature_y)
 
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawRightString(width - 82, 113, "VERIFICATION CODE")
-    pdf.setFont("Helvetica", 9)
-    pdf.drawRightString(width - 82, 96, str(certificate_record["verification_code"]))
+    pdf.setFillColorRGB(*navy)
+    pdf.setFont("ZapfChancery-MediumItalic", 15)
+    pdf.drawCentredString((left_x1 + left_x2) / 2, signature_y + 8, "Authorized Signature")
+    pdf.drawCentredString((right_x1 + right_x2) / 2, signature_y + 8, "Authorized Signature")
+
+    pdf.setFillColorRGB(*slate)
+    pdf.setFont("Helvetica-Bold", 8)
+    pdf.drawCentredString((left_x1 + left_x2) / 2, signature_y - 15, "SEVA COORDINATOR")
+    pdf.drawCentredString((right_x1 + right_x2) / 2, signature_y - 15, "PROGRAM DIRECTOR")
+
+    pdf.setFont("Helvetica", 8)
+    pdf.drawCentredString((left_x1 + left_x2) / 2, signature_y - 28, "Signature / Printed Name")
+    pdf.drawCentredString((right_x1 + right_x2) / 2, signature_y - 28, "Signature / Printed Name")
+
+    pdf.setStrokeColorRGB(*pale_gold)
+    pdf.setLineWidth(0.7)
+    pdf.line(72, 94, width - 72, 94)
+
+    pdf.setFillColorRGB(*navy)
+    pdf.setFont("Helvetica-Bold", 8)
+    pdf.drawString(72, 77, "DATE ISSUED")
+    pdf.setFont("Helvetica", 8.5)
+    pdf.drawString(72, 63, issued_date)
+
+    pdf.setFont("Helvetica-Bold", 8)
+    pdf.drawRightString(width - 72, 77, "CERTIFICATE VERIFICATION CODE")
+    pdf.setFont("Helvetica", 8.5)
+    pdf.drawRightString(width - 72, 63, str(certificate_record["verification_code"]))
 
     pdf.setFillColorRGB(*gold)
-    pdf.setFont("Helvetica-Bold", 10)
-    pdf.drawCentredString(width / 2, 64, "SEVA  •  SANGAT  •  COMMUNITY")
+    pdf.setFont("Helvetica-Bold", 8)
+    pdf.drawCentredString(width / 2, 47, "SEVA  •  SANGAT  •  COMMUNITY")
     pdf.save()
 
     buffer.seek(0)
