@@ -260,11 +260,14 @@ def init_db():
         if len(configured_emails) != len(set(configured_emails)):
             raise RuntimeError("Each Smart Seva admin role must use a different email address.")
 
-        # These management roles are controlled by the deployment settings.
-        # Reset them first so placeholder emails can safely be replaced later.
-        db.execute(
-            "UPDATE public.users SET role = 'student' WHERE role IN ('admin', 'seva_admin', 'paath_admin', 'pantry_admin', 'events_admin')"
-        )
+        # Only reset all management roles when every role email is explicitly
+        # configured. A missing Render variable must not silently demote the
+        # other admins on every restart. Explicitly configured emails are always
+        # promoted to their configured role below.
+        if all(role_emails.values()):
+            db.execute(
+                "UPDATE public.users SET role = 'student' WHERE role IN ('admin', 'seva_admin', 'paath_admin', 'pantry_admin', 'events_admin')"
+            )
 
         for role, email in role_emails.items():
             if email:
