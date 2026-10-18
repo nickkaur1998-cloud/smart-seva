@@ -4230,7 +4230,7 @@ def my_calendar():
             "status": str(item["status"])
         }
         for item in events
-    ], ensure_ascii=False)
+    ], ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
     signup_rows = ""
     for item in events:
