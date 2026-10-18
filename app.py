@@ -3751,6 +3751,9 @@ def donate_pantry_item(item_id):
 
     if request.method == "POST":
         validate_csrf()
+        if user["role"] != "student":
+            db.close()
+            abort(403)
         gurdwara = clean(request.form.get("gurdwara"), 150)
         try:
             quantity = finite_number(request.form.get("quantity", "0"), minimum=0.01, maximum=MAX_PANTRY_QUANTITY, field="Donation quantity")
@@ -3802,8 +3805,10 @@ def donate_pantry_item(item_id):
 def pantry_needs():
 
     user = current_user()
-    if user["role"] == "admin":
+    if user["role"] in ("admin", "pantry_admin"):
         return redirect(url_for("admin_pantry"))
+    if user["role"] != "student":
+        abort(403)
 
     db = get_db()
     needs = db.execute(
@@ -3904,12 +3909,13 @@ def pantry_signup(need_id):
 
     validate_csrf()
     user = current_user()
-    if user["role"] == "admin":
-        return redirect(url_for("admin_pantry"))
+    if user["role"] != "student":
+        abort(403)
 
     db = get_db()
+    # Serialize pledges for this need before checking remaining quantity.
     need = db.execute(
-        "SELECT * FROM pantry_needs WHERE id = ? AND status = 'published'",
+        "SELECT * FROM pantry_needs WHERE id = ? AND status = 'published' FOR UPDATE",
         (need_id,)
     ).fetchone()
     if not need:
@@ -4378,11 +4384,8 @@ def dashboard():
 
     user = current_user()
 
-    if user["role"] == "admin":
-
-        return redirect(
-            url_for("admin")
-        )
+    if user["role"] != "student":
+        abort(403)
 
     db = get_db()
 
@@ -5123,6 +5126,8 @@ def checkin(signup_id):
     validate_csrf()
 
     user = current_user()
+    if user["role"] != "student":
+        abort(403)
 
     db = get_db()
 
@@ -5146,7 +5151,7 @@ def checkin(signup_id):
 
         abort(404)
 
-    if signup["status"] != "pending" || signup["check_out"]:
+    if signup["status"] != "pending" or signup["check_out"]:
         db.close()
         abort(400, "Only active, pending Seva signups can check in.")
     if signup["check_in"]:
@@ -5209,8 +5214,8 @@ def checkout(signup_id):
 
     user = current_user()
 
-    if user["role"] == "admin":
-        return redirect(url_for("admin"))
+    if user["role"] != "student":
+        abort(403)
 
     db = get_db()
 
@@ -7192,19 +7197,22 @@ def approve_signup(signup_id):
 
         abort(404)
 
-    if not signup["check_out"]:
-
+    if signup["status"] != "pending":
         db.close()
-
-        abort(
-            400,
-            "Student has not checked out yet."
-        )
+        abort(400, "Only pending signups can be approved.")
+    if not signup["check_out"]:
+        db.close()
+        abort(400, "Student has not checked out yet.")
+    try:
+        submitted_hours = finite_number(signup["hours"], minimum=0.01, maximum=MAX_HOURS_PER_SEVA, field="Recorded hours")
+    except ValueError:
+        db.close()
+        abort(400, "Recorded hours are invalid; do not approve them.")
 
     user = current_user()
-    db.execute("UPDATE signups SET status = 'approved' WHERE id = ?", (signup_id,))
+    db.execute("UPDATE signups SET status = 'approved' WHERE id = ? AND status = 'pending'", (signup_id,))
     log_activity(db, user, "approved Seva hours", "signup", signup_id,
-                 {"user_id": str(signup["user_id"]), "hours": float(signup["hours"] or 0)})
+                 {"user_id": str(signup["user_id"]), "hours": submitted_hours})
     db.commit()
     notify_user(signup["user_id"], "Seva hours approved", "Your completed Seva hours have been approved.", "/dashboard")
     db.close()
