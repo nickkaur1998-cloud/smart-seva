@@ -1,6 +1,7 @@
 import os
 import secrets
 import json
+import math
 import re
 import qrcode
 from urllib.request import Request, urlopen
@@ -3187,8 +3188,8 @@ def paath_signup(paath_id):
     validate_csrf()
     user = current_user()
 
-    if user["role"] == "admin":
-        return redirect(url_for("admin_paath"))
+    if user["role"] != "student":
+        abort(403)
 
     db = get_db()
     # Serialize bookings by locking the slot row before checking capacity.
@@ -3488,6 +3489,13 @@ def signup(seva_id):
     ).fetchone()["count"]
 
     if seva_item["max_volunteers"] and signup_count >= seva_item["max_volunteers"]:
+        already_waiting = db.execute(
+            "SELECT id FROM seva_waitlist WHERE seva_id = ? AND user_id = ? AND status = 'waiting'",
+            (seva_id, user["id"])
+        ).fetchone()
+        if already_waiting:
+            db.close()
+            return redirect(url_for("seva"))
         try:
             db.execute("""INSERT INTO seva_waitlist (seva_id, user_id, status, created_at)
                           VALUES (?, ?, 'waiting', ?) ON CONFLICT (seva_id, user_id) DO NOTHING""",
@@ -4385,7 +4393,7 @@ def dashboard():
     user = current_user()
 
     if user["role"] != "student":
-        abort(403)
+        return management_home()
 
     db = get_db()
 
@@ -5322,8 +5330,8 @@ def generate_certificate():
 
     user = current_user()
 
-    if user["role"] == "admin":
-        return redirect(url_for("admin"))
+    if user["role"] != "student":
+        abort(403)
 
     db = get_db()
 
