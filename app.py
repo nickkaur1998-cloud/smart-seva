@@ -30,7 +30,8 @@ from psycopg.rows import dict_row
 
 from smart_seva_validation import finite_number, bounded_integer, iso_date, hhmm_time
 
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 
@@ -5670,8 +5671,8 @@ def download_certificate(verification_code):
         abort(403)
 
     buffer = BytesIO()
-    pdf = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
+    pdf = canvas.Canvas(buffer, pagesize=landscape(letter))
+    width, height = landscape(letter)
 
     # Formal award layout: ivory stock, layered gilded frame, and script typography.
     pdf.setTitle("Smart Seva Certificate of Seva")
@@ -5814,10 +5815,25 @@ def download_certificate(verification_code):
     pdf.setFont("Helvetica", 8.5)
     pdf.drawString(72, 63, issued_date)
 
-    pdf.setFont("Helvetica-Bold", 8)
-    pdf.drawRightString(width - 72, 77, "CERTIFICATE VERIFICATION CODE")
-    pdf.setFont("Helvetica", 8.5)
-    pdf.drawRightString(width - 72, 63, str(certificate_record["verification_code"]))
+    # QR code opens the public verification page; existing certificate IDs stay unchanged.
+    verification_url = request.url_root.rstrip("/") + url_for(
+        "verify_certificate",
+        verification_code=str(certificate_record["verification_code"])
+    )
+    qr_buffer = BytesIO()
+    qr_image = qrcode.make(verification_url)
+    qr_image.save(qr_buffer, format="PNG")
+    qr_buffer.seek(0)
+    pdf.drawImage(
+        ImageReader(qr_buffer),
+        width - 112, 48,
+        width=58, height=58,
+        preserveAspectRatio=True,
+        mask="auto"
+    )
+    pdf.setFillColorRGB(*navy)
+    pdf.setFont("Helvetica-Bold", 6.5)
+    pdf.drawCentredString(width - 83, 40, "SCAN TO VERIFY")
 
     pdf.setFillColorRGB(*gold)
     pdf.setFont("Helvetica-Bold", 8)
