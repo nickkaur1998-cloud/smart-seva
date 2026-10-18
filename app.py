@@ -5740,7 +5740,7 @@ def download_certificate(verification_code):
     pdf.line(132, height - 119, width - 132, height - 119)
 
     pdf.setFillColorRGB(*navy)
-    pdf.setFont("ZapfChancery-MediumItalic", 34)
+    pdf.setFont("Times-Italic", 34)
     pdf.drawCentredString(width / 2, height - 165, "Certificate of Seva")
     pdf.setFillColorRGB(*gold)
     pdf.setFont("Helvetica-Bold", 9)
@@ -5754,7 +5754,7 @@ def download_certificate(verification_code):
     if len(student_name) > 38:
         student_name = student_name[:35].rstrip() + "..."
     pdf.setFillColorRGB(*navy)
-    pdf.setFont("ZapfChancery-MediumItalic", 27 if len(student_name) < 25 else 21)
+    pdf.setFont("Times-Italic", 27 if len(student_name) < 25 else 21)
     pdf.drawCentredString(width / 2, height - 270, student_name)
 
     pdf.setStrokeColorRGB(*gold)
@@ -5791,7 +5791,7 @@ def download_certificate(verification_code):
     pdf.line(right_x1, signature_y, right_x2, signature_y)
 
     pdf.setFillColorRGB(*navy)
-    pdf.setFont("ZapfChancery-MediumItalic", 15)
+    pdf.setFont("Times-Italic", 15)
     pdf.drawCentredString((left_x1 + left_x2) / 2, signature_y + 8, "Authorized Signature")
     pdf.drawCentredString((right_x1 + right_x2) / 2, signature_y + 8, "Authorized Signature")
 
