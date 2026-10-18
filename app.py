@@ -3435,21 +3435,14 @@ def signup(seva_id):
 
     user = current_user()
 
-    if user["role"] == "admin":
-
-        return redirect(
-            url_for("admin")
-        )
+    if user["role"] != "student":
+        abort(403)
 
     db = get_db()
 
+    # Lock the opportunity row so simultaneous signups serialize on capacity.
     seva_item = db.execute(
-        """
-        SELECT id, title, date, end_time, max_volunteers,
-               (SELECT COUNT(*) FROM signups s2 WHERE s2.seva_id = seva.id AND s2.status != 'rejected') AS signup_count
-        FROM seva
-        WHERE id = ?
-        """,
+        "SELECT id, title, date, start_time, end_time, max_volunteers FROM seva WHERE id = ? FOR UPDATE",
         (seva_id,)
     ).fetchone()
 
@@ -3462,7 +3455,20 @@ def signup(seva_id):
         db.close()
         abort(400, "This Seva is closed because its end time has passed.")
 
-    if seva_item["max_volunteers"] and seva_item["signup_count"] >= seva_item["max_volunteers"]:
+    existing_signup = db.execute(
+        "SELECT id FROM signups WHERE seva_id = ? AND user_id = ? AND status NOT IN ('rejected', 'cancelled')",
+        (seva_id, user["id"])
+    ).fetchone()
+    if existing_signup:
+        db.close()
+        abort(400, "You already have a signup for this Seva.")
+
+    signup_count = db.execute(
+        "SELECT COUNT(*) AS count FROM signups WHERE seva_id = ? AND status NOT IN ('rejected', 'cancelled')",
+        (seva_id,)
+    ).fetchone()["count"]
+
+    if seva_item["max_volunteers"] and signup_count >= seva_item["max_volunteers"]:
         try:
             db.execute("""INSERT INTO seva_waitlist (seva_id, user_id, status, created_at)
                           VALUES (?, ?, 'waiting', ?) ON CONFLICT (seva_id, user_id) DO NOTHING""",
@@ -4050,17 +4056,20 @@ def create_pantry_need():
     details = clean(request.form.get("details"), 1000)
     needed_by = clean(request.form.get("needed_by"), 20)
     try:
-        quantity_needed = float(request.form.get("quantity_needed", "0"))
-    except (TypeError, ValueError):
-        quantity_needed = 0
+        quantity_needed = finite_number(request.form.get("quantity_needed", "0"), minimum=0.01, maximum=MAX_PANTRY_QUANTITY, field="Quantity needed")
+        needed_date = iso_date(needed_by, field="Bring-by date") if needed_by else None
+    except ValueError as exc:
+        abort(400, str(exc))
 
-    if not ingredient or not unit or quantity_needed <= 0:
-        abort(400, "Enter an ingredient, unit, and positive quantity.")
+    if not ingredient or unit not in {"lb", "kg", "bags", "cans", "boxes", "items"}:
+        abort(400, "Enter an ingredient and choose a supported unit.")
 
     # Keep all new weight-based needs in pounds internally.
     if unit == "kg":
         quantity_needed = convert_mass(quantity_needed, "kg", "lb")
         unit = "lb"
+    if not math.isfinite(quantity_needed) or quantity_needed > MAX_PANTRY_QUANTITY:
+        abort(400, "Quantity exceeds the maximum allowed amount.")
 
     db = get_db()
     db.execute(
@@ -4069,7 +4078,7 @@ def create_pantry_need():
         (ingredient, quantity_needed, unit, details, needed_by, created_by, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (ingredient, quantity_needed, unit, details, needed_by, user["id"], utc_now())
+        (ingredient, quantity_needed, unit, details, needed_date, user["id"], utc_now())
     )
     log_activity(db, user, "created pantry need", "pantry_need", None, {"ingredient": ingredient, "quantity": format_quantity(quantity_needed), "unit": unit})
     db.commit()
@@ -5100,11 +5109,11 @@ def checkin(signup_id):
 
     signup = db.execute(
         """
-        SELECT *
+        SELECT signups.*, seva.date, seva.start_time, seva.end_time
         FROM signups
-
-        WHERE id = ?
-        AND user_id = ?
+        JOIN seva ON seva.id = signups.seva_id
+        WHERE signups.id = ?
+        AND signups.user_id = ?
         """,
         (
             signup_id,
@@ -5118,13 +5127,33 @@ def checkin(signup_id):
 
         abort(404)
 
-    if signup["check_in"]:
-
+    if signup["status"] != "pending" || signup["check_out"]:
         db.close()
+        abort(400, "Only active, pending Seva signups can check in.")
+    if signup["check_in"]:
+        db.close()
+        return redirect(url_for("dashboard"))
 
-        return redirect(
-            url_for("dashboard")
-        )
+    try:
+        scheduled_start = datetime.strptime(
+            f"{signup['date']} {str(signup['start_time'])[:5]}",
+            "%Y-%m-%d %H:%M"
+        ).replace(tzinfo=APP_TIMEZONE)
+        scheduled_end = datetime.strptime(
+            f"{signup['date']} {str(signup['end_time'])[:5]}",
+            "%Y-%m-%d %H:%M"
+        ).replace(tzinfo=APP_TIMEZONE)
+    except (TypeError, ValueError):
+        db.close()
+        abort(400, "This Seva has an invalid schedule. Contact an administrator.")
+
+    now_local = datetime.now(APP_TIMEZONE)
+    if now_local < scheduled_start - timedelta(minutes=15):
+        db.close()
+        abort(400, "Check-in opens 15 minutes before the scheduled start time.")
+    if now_local > scheduled_end or seva_end_passed(signup["date"], signup["end_time"]):
+        db.close()
+        abort(400, "Check-in is closed because this Seva has ended.")
 
     db.execute(
         """
@@ -5186,9 +5215,12 @@ def checkout(signup_id):
         db.close()
         abort(404)
 
+    if signup["status"] != "pending":
+        db.close()
+        abort(400, "Only pending Seva signups can check out.")
     if not signup["check_in"]:
         db.close()
-        return redirect(url_for("dashboard"))
+        abort(400, "Check in before checking out.")
 
     if signup["check_out"]:
         db.close()
@@ -5213,8 +5245,17 @@ def checkout(signup_id):
         round(elapsed_seconds / 3600, 2)
     )
 
-    # Prevent accidental/unreasonable hour submissions.
-    hours = min(hours, 24)
+    scheduled_start = datetime.strptime(
+        f"{signup['date']} {str(signup['start_time'])[:5]}",
+        "%Y-%m-%d %H:%M"
+    )
+    scheduled_end = datetime.strptime(
+        f"{signup['date']} {str(signup['end_time'])[:5]}",
+        "%Y-%m-%d %H:%M"
+    )
+    scheduled_duration = max(0, (scheduled_end - scheduled_start).total_seconds() / 3600)
+    # Never credit more than the scheduled shift or 16 hours.
+    hours = min(hours, scheduled_duration, MAX_HOURS_PER_SEVA)
 
     db.execute(
         """
