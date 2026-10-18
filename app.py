@@ -4619,54 +4619,32 @@ def dashboard():
 
     certificate_button = ""
 
-    if total >= goal:
+    # Always keep an already-issued certificate accessible, even if the
+    # student's current service-hour goal is changed later.
+    if certificate:
+        certificate_code = h(certificate["verification_code"])
+        certificate_button = f"""
+        <div class="certificate-actions" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+            <a class="button" href="/certificate/{certificate_code}">View Certificate</a>
+            <a class="button" href="/certificate/{certificate_code}/download" download>Download Official PDF</a>
+        </div>
+        <p class="muted small">Your certificate is available to view online or save as a PDF.</p>
+        """
 
-        if certificate:
-
-            certificate_code = h(certificate["verification_code"])
-            certificate_button = f"""
-            <div class="certificate-actions" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-                <a class="button" href="/certificate/{certificate_code}">View Certificate</a>
-                <a class="button" href="/certificate/{certificate_code}/download" download>Download Official PDF</a>
-            </div>
-            <p class="muted small">Your certificate is available to view online or save as a PDF.</p>
-            """
-
-        else:
-
-            token = h(csrf_token())
-
-            certificate_button = f"""
-            <form
-                method="POST"
-                action="/generate-certificate"
-            >
-
-                <input
-                    type="hidden"
-                    name="csrf_token"
-                    value="{token}"
-                >
-
-                <button>
-                    🏆 Generate Certificate
-                </button>
-
-            </form>
-            """
+    elif total >= goal:
+        token = h(csrf_token())
+        certificate_button = f"""
+        <form method="POST" action="/generate-certificate">
+            <input type="hidden" name="csrf_token" value="{token}">
+            <button>Generate Certificate</button>
+        </form>
+        """
 
     else:
-
-        remaining = round(
-            goal - total,
-            2
-        )
-
+        remaining = round(goal - total, 2)
         certificate_button = f"""
         <p class="muted">
-            You need
-            <strong>{remaining}</strong>
-            more approved hours to reach your goal.
+            You need <strong>{remaining}</strong> more approved hours to reach your goal.
         </p>
         """
 
