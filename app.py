@@ -2581,8 +2581,8 @@ def register():
         goal_raw = request.form.get("goal", "40")
 
         try:
-            goal = float(goal_raw)
-        except (TypeError, ValueError):
+            goal = finite_number(goal_raw, minimum=1, maximum=10000, field="Seva goal")
+        except ValueError:
             goal = 0
 
         if not name or not email or not password:
@@ -3172,14 +3172,23 @@ def paath_signup(paath_id):
         return redirect(url_for("admin_paath"))
 
     db = get_db()
+    # Serialize bookings by locking the slot row before checking capacity.
     slot = db.execute(
-        "SELECT * FROM paath_slots WHERE id = ?",
+        "SELECT * FROM paath_slots WHERE id = ? FOR UPDATE",
         (paath_id,)
     ).fetchone()
 
     if not slot:
         db.close()
         abort(404)
+
+    existing = db.execute(
+        "SELECT id FROM paath_signups WHERE paath_id = ? AND user_id = ? AND status IN ('pending', 'approved')",
+        (paath_id, user["id"])
+    ).fetchone()
+    if existing:
+        db.close()
+        return redirect(url_for("paath"))
 
     booked = db.execute(
         """
@@ -3356,16 +3365,18 @@ def create_paath():
     end_time = clean(request.form.get("end_time"), 20)
 
     try:
-        price = float(request.form.get("price", "-1"))
-        capacity = int(request.form.get("capacity", "0"))
-        datetime.strptime(date, "%Y-%m-%d")
-        start = datetime.strptime(start_time, "%H:%M")
-        end = datetime.strptime(end_time, "%H:%M")
-    except (TypeError, ValueError):
-        abort(400, "Enter a valid date, time, price, and capacity.")
+        price = finite_number(request.form.get("price", "-1"), minimum=0, maximum=MAX_PAATH_PRICE, field="Sponsorship price")
+        capacity = bounded_integer(request.form.get("capacity", "0"), minimum=1, maximum=MAX_VOLUNTEERS, field="Available slots")
+        slot_date = iso_date(date, field="Paath date")
+        start = hhmm_time(start_time, field="Start time")
+        end = hhmm_time(end_time, field="End time")
+    except ValueError as exc:
+        abort(400, str(exc))
 
-    if not title or not description or end <= start or price < 0 or not 1 <= capacity <= 1000:
-        abort(400, "Check the paath slot details and try again.")
+    if not title or not description or end <= start:
+        abort(400, "Check the paath slot details. Price and capacity are outside allowed limits.")
+    if slot_date < datetime.now(APP_TIMEZONE).date():
+        abort(400, "Paath slots must be scheduled for today or a future date.")
 
     db = get_db()
     db.execute(
@@ -3565,9 +3576,9 @@ def pantry():
         expiry_date = clean(request.form.get("expiry_date"), 20)
 
         try:
-            quantity = float(request.form.get("quantity", "0"))
-            surplus = float(request.form.get("surplus", "0"))
-        except (TypeError, ValueError):
+            quantity = finite_number(request.form.get("quantity", "0"), minimum=0.01, maximum=MAX_PANTRY_QUANTITY, field="Quantity")
+            surplus = finite_number(request.form.get("surplus", "0"), minimum=0, maximum=MAX_PANTRY_QUANTITY, field="Surplus")
+        except ValueError:
             quantity = -1
             surplus = -1
 
@@ -3717,8 +3728,8 @@ def donate_pantry_item(item_id):
         validate_csrf()
         gurdwara = clean(request.form.get("gurdwara"), 150)
         try:
-            quantity = float(request.form.get("quantity", "0"))
-        except (TypeError, ValueError):
+            quantity = finite_number(request.form.get("quantity", "0"), minimum=0.01, maximum=MAX_PANTRY_QUANTITY, field="Donation quantity")
+        except ValueError:
             quantity = 0
 
         if not gurdwara or quantity <= 0 or quantity > available:
@@ -3892,8 +3903,8 @@ def pantry_signup(need_id):
     remaining = max(0, float(need["quantity_needed"]) - float(committed or 0))
 
     try:
-        quantity = float(request.form.get("quantity", "0"))
-    except (TypeError, ValueError):
+        quantity = finite_number(request.form.get("quantity", "0"), minimum=0.01, maximum=MAX_PANTRY_QUANTITY, field="Pledge quantity")
+    except ValueError:
         quantity = 0
 
     submitted_unit = canonical_unit(request.form.get("unit", ""))
@@ -3909,6 +3920,9 @@ def pantry_signup(need_id):
         db.close()
         abort(400, "The selected unit does not match this ingredient. Use the requested unit or kg/lb for weight-based needs.")
 
+    if not math.isfinite(converted_quantity) or converted_quantity > MAX_PANTRY_QUANTITY:
+        db.close()
+        abort(400, "Quantity exceeds the maximum allowed amount.")
     if converted_quantity > remaining + 1e-9:
         db.close()
         abort(400, "That amount is greater than the remaining need.")
