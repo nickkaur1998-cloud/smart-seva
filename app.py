@@ -2,6 +2,7 @@ import os
 import secrets
 import json
 import math
+import math
 import re
 import qrcode
 from urllib.request import Request, urlopen
@@ -3737,6 +3738,8 @@ def pantry():
 def donate_pantry_item(item_id):
 
     user = current_user()
+    if user["role"] != "student":
+        abort(403)
     db = get_db()
     item = db.execute(
         "SELECT * FROM pantry_items WHERE id = ? AND user_id = ?",
