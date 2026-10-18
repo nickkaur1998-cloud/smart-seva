@@ -6,7 +6,7 @@ import qrcode
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from functools import wraps
 from io import BytesIO
@@ -26,6 +26,8 @@ from flask import (
 
 from psycopg import connect, IntegrityError
 from psycopg.rows import dict_row
+
+from smart_seva_validation import finite_number, bounded_integer, iso_date, hhmm_time
 
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -281,19 +283,25 @@ def init_db():
 
 app = Flask(__name__)
 
-app.secret_key = os.environ.get(
-    "SECRET_KEY",
-    "smart-seva-development-secret-key-change-this"
-)
+_configured_secret = os.environ.get("SECRET_KEY", "").strip()
+if os.environ.get("RENDER") and not _configured_secret:
+    raise RuntimeError("SECRET_KEY must be set in the Render environment; refusing to use a predictable production secret.")
+app.secret_key = _configured_secret or "smart-seva-local-development-only"
 
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SESSION_COOKIE_SECURE", "0") == "1"
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get(
+    "SESSION_COOKIE_SECURE", "1" if os.environ.get("RENDER") else "0"
+) == "1"
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
 # Seva schedules are entered as local community times. California is the
 # default, but this can be changed with APP_TIMEZONE in Render/.env.
 APP_TIMEZONE = ZoneInfo(os.environ.get("APP_TIMEZONE", "America/Los_Angeles"))
+MAX_PAATH_PRICE = finite_number(os.environ.get("SMART_SEVA_MAX_PAATH_PRICE", "10000"), minimum=0, field="SMART_SEVA_MAX_PAATH_PRICE")
+MAX_PANTRY_QUANTITY = finite_number(os.environ.get("SMART_SEVA_MAX_PANTRY_QUANTITY", "10000"), minimum=0.01, field="SMART_SEVA_MAX_PANTRY_QUANTITY")
+MAX_VOLUNTEERS = 1000
+MAX_HOURS_PER_SEVA = 16
 
 
 # Verify the cloud database exists before the application starts serving requests.
