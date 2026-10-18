@@ -300,7 +300,7 @@ app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 # default, but this can be changed with APP_TIMEZONE in Render/.env.
 APP_TIMEZONE = ZoneInfo(os.environ.get("APP_TIMEZONE", "America/Los_Angeles"))
 MAX_PAATH_PRICE = finite_number(os.environ.get("SMART_SEVA_MAX_PAATH_PRICE", "10000"), minimum=0, field="SMART_SEVA_MAX_PAATH_PRICE")
-MAX_PANTRY_QUANTITY = finite_number(os.environ.get("SMART_SEVA_MAX_PANTRY_QUANTITY", "10000"), minimum=0.01, field="SMART_SEVA_MAX_PANTRY_QUANTITY")
+MAX_PANTRY_QUANTITY = finite_number(os.environ.get("SMART_SEVA_MAX_PANTRY_QUANTITY", "1000"), minimum=0.01, field="SMART_SEVA_MAX_PANTRY_QUANTITY")
 MAX_VOLUNTEERS = 1000
 MAX_HOURS_PER_SEVA = 16
 
@@ -2597,6 +2597,8 @@ def register():
             error = "Please fill out every field."
         elif len(password) < 8:
             error = "Password must be at least 8 characters."
+        elif len(password) > 128:
+            error = "Password must be no more than 128 characters."
         elif goal < 1 or goal > 10000:
             error = "Goal must be between 1 and 10,000 hours."
 
@@ -2659,7 +2661,7 @@ def register():
                     <label>Email</label>
                     <input type="email" name="email" required>
                     <label>Password</label>
-                    <input type="password" name="password" minlength="8" required>
+                    <input type="password" name="password" minlength="8" maxlength="128" required>
                     <label>Seva Goal (hours)</label>
                     <input type="number" name="goal" value="40" min="1" max="10000" required>
                     <button>Create Account</button>
@@ -2714,10 +2716,9 @@ def login():
                 metadata = auth_user.get("user_metadata") or {}
                 name = clean(metadata.get("name") or email.split("@")[0], 100)
                 try:
-                    goal = float(metadata.get("goal_hours") or 40)
-                except (TypeError, ValueError):
+                    goal = finite_number(metadata.get("goal_hours") or 40, minimum=1, maximum=10000, field="Seva goal")
+                except ValueError:
                     goal = 40
-                goal = min(max(goal, 1), 10000)
 
                 db.execute(
                     """
@@ -3766,8 +3767,9 @@ def donate_pantry_item(item_id):
     if user["role"] != "student":
         abort(403)
     db = get_db()
+    # Lock the donor's item row to prevent concurrent offers exceeding the surplus.
     item = db.execute(
-        "SELECT * FROM pantry_items WHERE id = ? AND user_id = ?",
+        "SELECT * FROM pantry_items WHERE id = ? AND user_id = ? FOR UPDATE",
         (item_id, user["id"])
     ).fetchone()
 
@@ -4119,6 +4121,8 @@ def create_pantry_need():
     try:
         quantity_needed = finite_number(request.form.get("quantity_needed", "0"), minimum=0.01, maximum=MAX_PANTRY_QUANTITY, field="Quantity needed")
         needed_date = iso_date(needed_by, field="Bring-by date") if needed_by else None
+        if needed_date and needed_date < datetime.now(APP_TIMEZONE).date():
+            raise ValueError("Bring-by date must be today or in the future.")
     except ValueError as exc:
         abort(400, str(exc))
 
