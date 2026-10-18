@@ -1299,6 +1299,10 @@ nav {
 }
 .logo { flex-shrink: 0; font-size: 16px; letter-spacing: .1em; }
 .logo-mark { font-size: 34px; }
+.logout-form { display: inline; margin: 0; }
+.nav-logout { background: transparent; border: 0; color: white; cursor: pointer; font: inherit; padding: 8px 10px; }
+.nav-logout:hover { color: var(--sun); }
+
 .nav-actions {
     display: flex;
     align-items: center;
@@ -1972,6 +1976,9 @@ def layout(content, title="Smart Seva"):
         }});
         </script>
         """
+
+    logout_control = f"""<form method="POST" action="/logout" class="logout-form"><input type="hidden" name="csrf_token" value="{h(csrf_token())}"><button type="submit" class="nav-logout">Logout</button></form>"""
+    nav = nav.replace('<a href="/logout">Logout</a>', logout_control).replace('<a href="/logout">Log out</a>', logout_control)
 
     return f"""
     <!DOCTYPE html>
@@ -2779,9 +2786,10 @@ def login():
 # LOGOUT
 # ============================================================
 
-@app.route("/logout")
+@app.route("/logout", methods=["POST"])
 def logout():
 
+    validate_csrf()
     session.clear()
 
     return redirect(
