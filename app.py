@@ -2915,7 +2915,7 @@ def seva():
         {"id": int(x["id"]), "title": str(x["title"]), "date": str(x["date"]),
          "start_time": str(x["start_time"])[:5], "location": str(x["location"])}
         for x in calendar_rows
-    ], ensure_ascii=False)
+    ], ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
     active_filters = []
     if q: active_filters.append("Search: " + q)
@@ -3003,18 +3003,37 @@ def seva():
                 const last = new Date(year, month + 1, 0);
                 title.textContent = first.toLocaleString(undefined, {{month:"long", year:"numeric"}}) + " Seva Calendar";
                 const names = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-                root.innerHTML = names.map(function(n) {{ return '<div class="calendar-head">' + n + '</div>'; }}).join("");
-                for (let i = 0; i < first.getDay(); i++) root.innerHTML += '<div class="calendar-day empty"></div>';
+                root.replaceChildren();
+                names.forEach(function(n) {{
+                    const heading = document.createElement("div");
+                    heading.className = "calendar-head";
+                    heading.textContent = n;
+                    root.appendChild(heading);
+                }});
+                for (let i = 0; i < first.getDay(); i++) {{
+                    const empty = document.createElement("div");
+                    empty.className = "calendar-day empty";
+                    root.appendChild(empty);
+                }}
                 const today = new Date();
                 for (let day = 1; day <= last.getDate(); day++) {{
                     const key = year + "-" + String(month + 1).padStart(2,"0") + "-" + String(day).padStart(2,"0");
                     const events = calendarItems.filter(function(x) {{ return x.date === key; }});
                     const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
-                    let eventHtml = "";
+                    const cell = document.createElement("div");
+                    cell.className = "calendar-day" + (isToday ? " today" : "");
+                    const number = document.createElement("div");
+                    number.className = "calendar-num";
+                    number.textContent = String(day);
+                    cell.appendChild(number);
                     events.forEach(function(x) {{
-                        eventHtml += '<a class="calendar-event" href="/seva?date=' + encodeURIComponent(x.date) + '">' + x.start_time + ' · ' + x.title + '</a>';
+                        const link = document.createElement("a");
+                        link.className = "calendar-event";
+                        link.href = "/seva?date=" + encodeURIComponent(x.date);
+                        link.textContent = String(x.start_time) + " · " + String(x.title);
+                        cell.appendChild(link);
                     }});
-                    root.innerHTML += '<div class="calendar-day ' + (isToday ? "today" : "") + '"><div class="calendar-num">' + day + '</div>' + eventHtml + '</div>';
+                    root.appendChild(cell);
                 }}
             }}
             function changeCalendar(delta) {{
@@ -7031,9 +7050,9 @@ def create_seva():
     )
 
     try:
-        max_volunteers = max(0, int(request.form.get("max_volunteers") or 0))
-    except ValueError:
-        abort(400, "Capacity must be a whole number.")
+        max_volunteers = bounded_integer(request.form.get("max_volunteers") or 0, minimum=0, maximum=MAX_VOLUNTEERS, field="Capacity")
+    except ValueError as exc:
+        abort(400, str(exc))
 
     if not all(
         [
@@ -7054,20 +7073,12 @@ def create_seva():
     # Validate date/time format.
     try:
 
-        datetime.strptime(
-            date,
-            "%Y-%m-%d"
-        )
+        parsed_date = iso_date(date, field="Seva date")
+        start = hhmm_time(start_time, field="Start time")
+        end = hhmm_time(end_time, field="End time")
 
-        start = datetime.strptime(
-            start_time,
-            "%H:%M"
-        )
-
-        end = datetime.strptime(
-            end_time,
-            "%H:%M"
-        )
+        if parsed_date < datetime.now(APP_TIMEZONE).date():
+            abort(400, "Seva opportunities must be scheduled for today or a future date.")
 
         if end <= start:
 
