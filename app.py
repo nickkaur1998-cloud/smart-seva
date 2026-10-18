@@ -2,7 +2,6 @@ import os
 import secrets
 import json
 import math
-import math
 import re
 import qrcode
 from urllib.request import Request, urlopen
@@ -3345,7 +3344,7 @@ def admin_paath():
                         <div><label>End Time</label><input type="time" name="end_time" required></div>
                     </div>
                     <div class="grid">
-                        <div><label>Sponsorship Price ($)</label><input type="number" name="price" min="0" step="0.01" required></div>
+                        <div><label>Sponsorship Price ($)</label><input type="number" name="price" min="0" max="{MAX_PAATH_PRICE}" step="0.01" required></div>
                         <div><label>Available Slots</label><input type="number" name="capacity" min="1" max="1000" value="1" required></div>
                     </div>
                     <button>Publish Paath Slot</button>
@@ -3422,13 +3421,31 @@ def update_paath_request(request_id, status):
     if status not in ("approved", "rejected"):
         abort(400)
 
+    user = current_user()
     db = get_db()
+    signup = db.execute(
+        "SELECT id, user_id, status FROM paath_signups WHERE id = ?",
+        (request_id,)
+    ).fetchone()
+    if not signup:
+        db.close()
+        abort(404)
+    if signup["status"] != "pending":
+        db.close()
+        abort(400, "Only pending Paath requests can be reviewed.")
+
     db.execute(
-        "UPDATE paath_signups SET status = ? WHERE id = ?",
+        "UPDATE paath_signups SET status = ? WHERE id = ? AND status = 'pending'",
         (status, request_id)
     )
+    log_activity(db, user, "reviewed Paath request", "paath_signup", request_id,
+                 {"student_id": str(signup["user_id"]), "status": status})
     db.commit()
     db.close()
+    if status == "approved":
+        notify_user(signup["user_id"], "Paath request approved", "Your Paath sponsorship request has been approved.", "/paath")
+    else:
+        notify_user(signup["user_id"], "Paath request declined", "Your Paath sponsorship request was declined.", "/paath")
     return redirect(url_for("admin_paath"))
 
 
@@ -4055,7 +4072,7 @@ def admin_pantry():
                     <input type="hidden" name="csrf_token" value="{token}">
                     <div class="grid">
                         <label>Ingredient<input name="ingredient" maxlength="100" placeholder="Rice, lentils, flour..." required></label>
-                        <label>Quantity needed<input name="quantity_needed" type="number" min="0.01" step="0.01" required></label>
+                        <label>Quantity needed<input name="quantity_needed" type="number" min="0.01" max="{MAX_PANTRY_QUANTITY}" step="0.01" required></label>
                         <label>Unit
                             <select name="unit" required>
                                 <option value="lb">lb</option>
@@ -6108,11 +6125,11 @@ def create_event():
         abort(400, "Invalid event status.")
 
     try:
-        datetime.strptime(date, "%Y-%m-%d")
+        parsed_event_date = iso_date(date, field="Event date")
         if start_time:
-            datetime.strptime(start_time, "%H:%M")
+            hhmm_time(start_time, field="Start time")
         if end_time:
-            datetime.strptime(end_time, "%H:%M")
+            hhmm_time(end_time, field="End time")
         if start_time and end_time and end_time <= start_time:
             abort(400, "End time must be after start time.")
     except ValueError:
@@ -7250,7 +7267,7 @@ def reject_signup(signup_id):
 
     signup = db.execute(
         """
-        SELECT id, user_id
+        SELECT id, user_id, status, check_out
         FROM signups
         WHERE id = ?
         """,
@@ -7263,8 +7280,11 @@ def reject_signup(signup_id):
 
         abort(404)
 
+    if signup["status"] != "pending":
+        db.close()
+        abort(400, "Only pending signups can be rejected.")
     user = current_user()
-    db.execute("UPDATE signups SET status = 'rejected' WHERE id = ?", (signup_id,))
+    db.execute("UPDATE signups SET status = 'rejected' WHERE id = ? AND status = 'pending'", (signup_id,))
     log_activity(db, user, "rejected Seva hours", "signup", signup_id,
                  {"user_id": str(signup["user_id"])})
     db.commit()
