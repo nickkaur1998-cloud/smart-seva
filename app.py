@@ -23,6 +23,7 @@ from flask import (
     abort,
     jsonify,
     render_template_string,
+    g,
 )
 
 from psycopg import connect, IntegrityError
@@ -291,14 +292,84 @@ app = Flask(__name__)
 _configured_secret = os.environ.get("SECRET_KEY", "").strip()
 if os.environ.get("RENDER") and not _configured_secret:
     raise RuntimeError("SECRET_KEY must be set in the Render environment; refusing to use a predictable production secret.")
-app.secret_key = _configured_secret or "smart-seva-local-development-only"
+if _configured_secret and len(_configured_secret) < 32:
+    raise RuntimeError("SECRET_KEY must be at least 32 characters long.")
+# Without a configured secret, use a random per-process key rather than a
+# predictable one. Local sessions simply reset when the server restarts.
+app.secret_key = _configured_secret or secrets.token_hex(32)
 
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get(
     "SESSION_COOKIE_SECURE", "1" if os.environ.get("RENDER") else "0"
 ) == "1"
+app.config["SESSION_COOKIE_NAME"] = "__Host-seva" if app.config["SESSION_COOKIE_SECURE"] else "seva_session"
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
+
+# Render terminates TLS in front of the app; trust exactly one proxy hop so
+# request.remote_addr (used for rate limiting) is the real client address.
+if os.environ.get("RENDER"):
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+
+# ============================================================
+# SECURITY: HEADERS AND RATE LIMITING
+# ============================================================
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()"
+    )
+    response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    # The pages use inline scripts/styles and the Punjabi translate feature
+    # calls translate.googleapis.com, so those are allowed explicitly.
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self' https://translate.googleapis.com; "
+        "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+    )
+    if app.config["SESSION_COOKIE_SECURE"]:
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    if session.get("user_id"):
+        # Authenticated pages hold personal data; keep them out of shared caches.
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+_rate_hits = {}
+
+
+def rate_limited(bucket, key, limit, window_seconds):
+    """Sliding-window limiter held in process memory.
+
+    Each gunicorn worker keeps its own counters, so the effective limit is
+    per worker; use a shared store such as Redis if you scale out widely.
+    Returns True when the caller has exceeded the limit.
+    """
+    now = datetime.now(timezone.utc).timestamp()
+    cutoff = now - window_seconds
+    hits = [t for t in _rate_hits.get((bucket, key), []) if t > cutoff]
+    if len(hits) >= limit:
+        _rate_hits[(bucket, key)] = hits
+        return True
+    hits.append(now)
+    _rate_hits[(bucket, key)] = hits
+    if len(_rate_hits) > 10000:
+        for stale in [k for k, v in _rate_hits.items() if not v or v[-1] <= now - 3600]:
+            _rate_hits.pop(stale, None)
+    return False
 
 # Seva schedules are entered as local community times. California is the
 # default, but this can be changed with APP_TIMEZONE in Render/.env.
@@ -430,18 +501,26 @@ def current_user():
     if not user_id:
         return None
 
+    # Cache per request so decorators and handlers share one query.
+    if getattr(g, "_current_user_id", None) == user_id:
+        return g._current_user
+
     db = get_db()
 
-    user = db.execute(
-        """
-        SELECT *
-        FROM users
-        WHERE id = ?
-        """,
-        (user_id,)
-    ).fetchone()
+    try:
+        user = db.execute(
+            """
+            SELECT *
+            FROM users
+            WHERE id = ?
+            """,
+            (user_id,)
+        ).fetchone()
+    finally:
+        db.close()
 
-    db.close()
+    g._current_user_id = user_id
+    g._current_user = user
 
     return user
 
@@ -2606,6 +2685,9 @@ def register():
         elif goal < 1 or goal > 10000:
             error = "Goal must be between 1 and 10,000 hours."
 
+        if not error and rate_limited("register-ip", request.remote_addr or "unknown", 10, 3600):
+            error = "Too many sign-up attempts. Please try again later."
+
         if not error:
             try:
                 auth = supabase_auth_request(
@@ -2645,8 +2727,11 @@ def register():
 
                 return redirect(url_for("login", registered=1))
 
-            except (ValueError, RuntimeError) as exc:
+            except ValueError as exc:
                 error = str(exc)
+            except RuntimeError as exc:
+                app.logger.error("Registration failed: %s", exc)
+                error = "Registration is temporarily unavailable. Please try again later."
             except IntegrityError:
                 error = "That email is already registered."
 
@@ -2690,7 +2775,16 @@ def login():
         validate_csrf()
 
         email = clean(request.form.get("email"), 255).lower()
-        password = request.form.get("password", "")
+        password = request.form.get("password", "")[:128]
+        client_ip = request.remote_addr or "unknown"
+
+        if (rate_limited("login-ip", client_ip, 20, 900)
+                or rate_limited("login-email", email, 8, 900)):
+            return layout(
+                '<div class="container"><div class="card center"><h1>Too many attempts</h1>'
+                '<p class="muted">Please wait 15 minutes before trying again.</p></div></div>',
+                "Too many attempts"
+            ), 429
 
         try:
             auth = supabase_auth_request(
@@ -2743,7 +2837,9 @@ def login():
             if not user:
                 raise RuntimeError("Your Supabase account does not have a Smart Seva profile.")
 
+            # New session on login prevents session fixation.
             session.clear()
+            session.permanent = True
             session["user_id"] = str(user["id"])
             session["csrf_token"] = secrets.token_urlsafe(32)
 
@@ -2752,8 +2848,13 @@ def login():
 
             return redirect(url_for("dashboard"))
 
-        except (ValueError, RuntimeError) as exc:
-            error = str(exc) if str(exc) else "Incorrect email or password."
+        except ValueError:
+            # Same message for unknown email and wrong password.
+            error = "Incorrect email or password."
+        except RuntimeError as exc:
+            # Configuration/profile problems are logged, not shown to visitors.
+            app.logger.error("Login failed: %s", exc)
+            error = "Login is temporarily unavailable. Please try again later."
 
     token = h(csrf_token())
     registered = request.args.get("registered")
@@ -4955,6 +5056,10 @@ def seva_bot():
     if not supplied_token or not stored_token or not secrets.compare_digest(supplied_token, stored_token):
         return jsonify({"error": "Your security token expired. Refresh the page and try again."}), 400
 
+    if (rate_limited("bot-minute", str(user["id"]), 6, 60)
+            or rate_limited("bot-day", str(user["id"]), 100, 86400)):
+        return jsonify({"error": "You're sending messages too quickly. Please wait a bit and try again."}), 429
+
     payload = request.get_json(silent=True) or {}
     message = clean(payload.get("message"), 1000)
     if not message:
@@ -5005,9 +5110,16 @@ def seva_bot():
     # Use Claude when an Anthropic API key is configured. The key stays server-side;
     # if the API is unavailable, retain the existing built-in helper as a fallback.
     anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    # Cost controls: a site-wide daily cap on paid calls (then the free helper
+    # answers), and trim the context sent with each request.
+    daily_cap = int(os.environ.get("SEVA_BOT_DAILY_CLAUDE_CAP", "200") or 0)
+    if anthropic_api_key and rate_limited("bot-claude-global", "all", daily_cap, 86400):
+        anthropic_api_key = ""
     if anthropic_api_key:
         try:
             model = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001").strip()
+            context["upcoming_opportunities"] = context["upcoming_opportunities"][:6]
+            context["recent_signups"] = context["recent_signups"][:5]
             system_prompt = (
                 "You are Seva Bot, the friendly, careful assistant for Smart Seva, a gurdwara "
                 "community-service website. Help students understand Seva opportunities, sign-ups, "
@@ -5022,7 +5134,7 @@ def seva_bot():
             )
             api_payload = {
                 "model": model,
-                "max_tokens": 450,
+                "max_tokens": 300,
                 "system": system_prompt,
                 "messages": [{
                     "role": "user",
@@ -5045,6 +5157,11 @@ def seva_bot():
             )
             with urlopen(api_request, timeout=18) as api_response:
                 api_result = json.loads(api_response.read().decode("utf-8"))
+            usage = api_result.get("usage") or {}
+            app.logger.info(
+                "Seva Bot usage: model=%s input_tokens=%s output_tokens=%s",
+                api_result.get("model", model), usage.get("input_tokens"), usage.get("output_tokens"),
+            )
             content_blocks = api_result.get("content", [])
             claude_reply = next(
                 (block.get("text", "").strip() for block in content_blocks
