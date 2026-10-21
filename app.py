@@ -1810,6 +1810,77 @@ footer { position: relative; z-index: 1; border-top: 1px solid rgba(215,168,62,.
     main .button:hover, main button:hover, main input[type="submit"]:hover { transform: none; }
 }
 
+/* Night sky: individually twinkling canvas stars, shooting stars, and a glowing Ik Onkar. */
+.night-sky::before, .night-sky::after { animation: none; opacity: .18; }
+#star-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.night-sky::selection { background: transparent; }
+
+.ik-constellation {
+    color: rgba(255,231,161,.2);
+    animation: ik-drift 18s ease-in-out infinite alternate, ik-glow 4.5s ease-in-out infinite;
+}
+@keyframes ik-glow {
+    0%, 100% { text-shadow: 0 0 10px rgba(215,168,62,.18), 0 0 30px rgba(215,168,62,.08); }
+    50% { text-shadow: 0 0 22px rgba(255,231,161,.55), 0 0 60px rgba(215,168,62,.32); }
+}
+
+.ik-halo {
+    position: absolute;
+    left: 50%;
+    top: 46%;
+    transform: translate(-50%, -50%);
+    font-family: "Noto Sans Gurmukhi", "Segoe UI Symbol", serif;
+    font-size: clamp(220px, 38vw, 520px);
+    line-height: 1;
+    background: linear-gradient(110deg, rgba(215,168,62,.05) 20%, rgba(255,231,161,.30) 48%, rgba(215,168,62,.05) 76%);
+    background-size: 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 28px rgba(215,168,62,.22));
+    animation: ik-shimmer 9s ease-in-out infinite alternate, ik-halo-pulse 6s ease-in-out infinite;
+    user-select: none;
+}
+@keyframes ik-shimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+@keyframes ik-halo-pulse {
+    0%, 100% { opacity: .55; transform: translate(-50%, -50%) scale(.97); }
+    50% { opacity: 1; transform: translate(-50%, -50%) scale(1.03); }
+}
+
+.logo-mark {
+    background: linear-gradient(100deg, #b9872d 0%, #ffe7a1 45%, #d7a83e 60%, #b9872d 100%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 8px rgba(215,168,62,.55));
+    animation: emblem-breathe 5s ease-in-out infinite, logo-shine 4s linear infinite;
+}
+@keyframes logo-shine { from { background-position: 200% 0; } to { background-position: -20% 0; } }
+
+.hero-emblem, .showcase-emblem, .cta-emblem {
+    animation: emblem-aura 4.5s ease-in-out infinite;
+}
+@keyframes emblem-aura {
+    0%, 100% { text-shadow: 0 0 14px rgba(215,168,62,.35); filter: drop-shadow(0 0 6px rgba(215,168,62,.25)); }
+    50% { text-shadow: 0 0 34px rgba(255,231,161,.85); filter: drop-shadow(0 0 20px rgba(255,231,161,.5)); }
+}
+
+footer { animation: footer-twinkle 5s ease-in-out infinite; }
+@keyframes footer-twinkle { 0%, 100% { color: #777d96; } 50% { color: #ffe7a1; text-shadow: 0 0 14px rgba(215,168,62,.4); } }
+
+main .card { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+main .card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(255,231,161,.5);
+    box-shadow: 0 14px 44px rgba(0,0,0,.35), 0 0 26px rgba(215,168,62,.16);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ik-halo, .ik-constellation, .logo-mark, .hero-emblem, .showcase-emblem, .cta-emblem, footer { animation: none !important; }
+    main .card:hover { transform: none; }
+}
+
 </style>
 """
 
@@ -2086,10 +2157,99 @@ def layout(content, title="Smart Seva"):
     <body>
 
         <div class="night-sky" aria-hidden="true">
+            <canvas id="star-canvas"></canvas>
+            <span class="ik-halo">ੴ</span>
             <span class="ik-constellation ik-one">ੴ</span>
             <span class="ik-constellation ik-two">ੴ</span>
             <span class="ik-constellation ik-three">ੴ</span>
         </div>
+
+        <script>
+        (function () {{
+            var canvas = document.getElementById("star-canvas");
+            if (!canvas || !canvas.getContext) return;
+            var ctx = canvas.getContext("2d");
+            var still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            var colors = ["255,255,255", "255,231,161", "184,216,255", "255,214,170"];
+            var stars = [], shooting = null, nextShot = 0, w = 0, h = 0, dpr = 1, running = true;
+
+            function resize() {{
+                dpr = Math.min(window.devicePixelRatio || 1, 2);
+                w = window.innerWidth; h = window.innerHeight;
+                canvas.width = w * dpr; canvas.height = h * dpr;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                var count = Math.max(60, Math.min(240, Math.round(w * h / 7000)));
+                stars = [];
+                for (var i = 0; i < count; i++) {{
+                    stars.push({{
+                        x: Math.random() * w, y: Math.random() * h,
+                        r: Math.random() < 0.12 ? 1.6 + Math.random() * 1.1 : 0.5 + Math.random() * 0.9,
+                        c: colors[Math.floor(Math.random() * colors.length)],
+                        phase: Math.random() * Math.PI * 2,
+                        speed: 0.6 + Math.random() * 2.4,
+                        base: 0.25 + Math.random() * 0.35
+                    }});
+                }}
+            }}
+
+            function draw(t) {{
+                if (!running) return;
+                var time = t / 1000;
+                ctx.clearRect(0, 0, w, h);
+                for (var i = 0; i < stars.length; i++) {{
+                    var s = stars[i];
+                    var tw = still ? 0.5 : (Math.sin(time * s.speed + s.phase) + 1) / 2;
+                    var a = s.base + (1 - s.base) * tw * tw;
+                    ctx.globalAlpha = a;
+                    ctx.fillStyle = "rgb(" + s.c + ")";
+                    ctx.beginPath();
+                    ctx.arc(s.x, s.y, s.r * (0.8 + 0.5 * tw), 0, 6.2832);
+                    ctx.fill();
+                    if (s.r > 1.5 && tw > 0.6) {{
+                        // Bright stars get a four-point sparkle at the peak of the twinkle.
+                        var len = s.r * 5 * tw;
+                        ctx.globalAlpha = a * 0.7;
+                        ctx.strokeStyle = "rgb(" + s.c + ")";
+                        ctx.lineWidth = 0.7;
+                        ctx.beginPath();
+                        ctx.moveTo(s.x - len, s.y); ctx.lineTo(s.x + len, s.y);
+                        ctx.moveTo(s.x, s.y - len); ctx.lineTo(s.x, s.y + len);
+                        ctx.stroke();
+                    }}
+                }}
+                if (!still) {{
+                    if (!shooting && time > nextShot) {{
+                        shooting = {{ x: Math.random() * w * 0.8, y: Math.random() * h * 0.4,
+                                     vx: 7 + Math.random() * 4, vy: 3 + Math.random() * 2, life: 1 }};
+                        nextShot = time + 6 + Math.random() * 10;
+                    }}
+                    if (shooting) {{
+                        var g = ctx.createLinearGradient(shooting.x, shooting.y,
+                            shooting.x - shooting.vx * 9, shooting.y - shooting.vy * 9);
+                        g.addColorStop(0, "rgba(255,244,214," + shooting.life + ")");
+                        g.addColorStop(1, "rgba(255,231,161,0)");
+                        ctx.globalAlpha = 1;
+                        ctx.strokeStyle = g; ctx.lineWidth = 1.6;
+                        ctx.beginPath();
+                        ctx.moveTo(shooting.x, shooting.y);
+                        ctx.lineTo(shooting.x - shooting.vx * 9, shooting.y - shooting.vy * 9);
+                        ctx.stroke();
+                        shooting.x += shooting.vx; shooting.y += shooting.vy; shooting.life -= 0.014;
+                        if (shooting.life <= 0 || shooting.x > w + 40 || shooting.y > h + 40) shooting = null;
+                    }}
+                    requestAnimationFrame(draw);
+                }}
+            }}
+
+            document.addEventListener("visibilitychange", function () {{
+                running = !document.hidden;
+                if (running && !still) requestAnimationFrame(draw);
+            }});
+            window.addEventListener("resize", function () {{ resize(); if (still) draw(0); }});
+            resize();
+            requestAnimationFrame(draw);
+        }})();
+        </script>
 
         <a class="skip-link" href="#main-content">Skip to main content</a>
         <nav aria-label="Main navigation">
