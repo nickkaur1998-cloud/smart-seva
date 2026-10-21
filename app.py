@@ -24,6 +24,8 @@ from flask import (
     jsonify,
     render_template_string,
     g,
+    flash,
+    get_flashed_messages,
 )
 
 from psycopg import connect, IntegrityError
@@ -667,1222 +669,14 @@ def milestone_badges(total_hours, completed_count):
 # STYLES
 # ============================================================
 
-STYLE = """
-<style>
+def _asset_version(filename):
+    """Cache-busting suffix so browsers refetch a static file only when it changes."""
+    try:
+        return str(int(os.path.getmtime(os.path.join(app.static_folder, filename))))
+    except OSError:
+        return "0"
 
-:root {
-    --ink: #04070f;
-    --deep: #0b1020;
-    --midnight: #111a31;
-    --gold: #d7a83e;
-    --sun: #ffe7a1;
-    --line: rgba(215,168,62,.22);
-}
 
-* {
-    box-sizing: border-box;
-}
-
-html {
-    min-height: 100%;
-    background: var(--ink);
-}
-
-body {
-    margin: 0;
-
-    font-family:
-        "Trebuchet MS",
-        "Segoe UI",
-        sans-serif;
-
-    color: white;
-
-    background: #030a1d;
-
-    min-height: 100vh;
-    overflow-x: hidden;
-    position: relative;
-}
-
-.night-sky {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    overflow: hidden;
-    background: #030a1d;
-}
-
-.night-sky::before,
-.night-sky::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    opacity: .82;
-    background-image:
-        radial-gradient(circle, #ffffff 0 1.2px, transparent 1.8px),
-        radial-gradient(circle, #ffe7a1 0 1.1px, transparent 1.7px),
-        radial-gradient(circle, rgba(184,216,255,.9) 0 1px, transparent 1.6px);
-    background-size: 137px 151px, 211px 193px, 97px 113px;
-    background-position: 7px 19px, 43px 71px, 29px 3px;
-    animation: star-flicker 5s steps(2, end) infinite alternate;
-}
-
-.night-sky::after {
-    opacity: .45;
-    transform: none;
-    animation: star-flicker 7s steps(2, end) infinite alternate-reverse;
-}
-
-@keyframes star-flicker {
-    from { opacity: .32; }
-    to { opacity: 1; }
-}
-
-.ik-constellation {
-    position: absolute;
-    color: rgba(255, 231, 161, .12);
-    font-family: "Noto Sans Gurmukhi", "Segoe UI Symbol", serif;
-    font-size: clamp(70px, 10vw, 160px);
-    line-height: 1;
-    text-shadow: 0 0 14px rgba(215,168,62,.16);
-    animation: ik-drift 16s ease-in-out infinite alternate;
-}
-
-.ik-one { top: 13%; left: 7%; animation-delay: -3s; }
-.ik-two { top: 38%; right: 8%; font-size: clamp(50px, 7vw, 110px); animation-delay: -10s; }
-.ik-three { bottom: 8%; left: 40%; font-size: clamp(45px, 6vw, 95px); animation-delay: -7s; }
-
-@keyframes ik-drift {
-    from { transform: translate3d(-12px, 8px, 0) rotate(-7deg); opacity: .1; }
-    to { transform: translate3d(20px, -18px, 0) rotate(8deg); opacity: .34; }
-}
-
-nav {
-    min-height: 70px;
-
-    padding: 0 6%;
-
-    display: flex;
-
-    justify-content: space-between;
-
-    align-items: center;
-
-    background: rgba(3,6,14,.78);
-    backdrop-filter: blur(18px);
-
-    border-bottom:
-        1px solid
-        var(--line);
-
-    position: sticky;
-
-    top: 0;
-
-    z-index: 100;
-
-    box-shadow: 0 12px 40px rgba(0,0,0,.18);
-    animation: nav-glow 8s ease-in-out infinite alternate;
-}
-
-@keyframes nav-glow {
-    from { box-shadow: 0 12px 40px rgba(0,0,0,.18); }
-    to { box-shadow: 0 12px 44px rgba(215,168,62,.12); }
-}
-
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 18px;
-    font-weight: bold;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-}
-
-.logo-mark {
-    color: var(--gold);
-    font-family: "Noto Sans Gurmukhi", "Segoe UI Symbol", serif;
-    font-size: 31px;
-    line-height: 1;
-    text-shadow: 0 0 22px rgba(215,168,62,.5);
-    animation: emblem-breathe 5s ease-in-out infinite;
-}
-
-@keyframes emblem-breathe {
-    0%, 100% { transform: translateY(0) rotate(-2deg); opacity: .86; }
-    50% { transform: translateY(-2px) rotate(2deg); opacity: 1; }
-}
-
-.gold {
-    color: var(--sun);
-    text-shadow: 0 0 30px rgba(215,168,62,.26);
-}
-
-nav a {
-    color: #dce8ef;
-
-    text-decoration: none;
-
-    margin-left: 18px;
-}
-
-nav a:hover {
-    color: var(--sun);
-    text-shadow: 0 0 18px rgba(215,168,62,.5);
-}
-
-.nav-dropdown {
-    position: relative;
-    display: inline-block;
-}
-
-.nav-dropdown > summary {
-    list-style: none;
-    cursor: pointer;
-    color: #dce8ef;
-    padding: 9px 12px;
-    border: 1px solid rgba(215,168,62,.22);
-    border-radius: 9px;
-    background: rgba(255,255,255,.035);
-    white-space: nowrap;
-    user-select: none;
-}
-
-.nav-dropdown > summary::-webkit-details-marker {
-    display: none;
-}
-
-.nav-dropdown > summary::after {
-    content: " ▾";
-    color: var(--sun);
-    font-size: 11px;
-}
-
-.nav-dropdown[open] > summary,
-.nav-dropdown > summary:hover,
-.nav-dropdown > summary:focus-visible {
-    color: var(--sun);
-    border-color: rgba(215,168,62,.6);
-    outline-offset: 3px;
-}
-
-.nav-dropdown-menu {
-    position: absolute;
-    top: calc(100% + 8px);
-    left: 0;
-    min-width: 190px;
-    z-index: 500;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    padding: 8px;
-    border: 1px solid rgba(215,168,62,.3);
-    border-radius: 12px;
-    background: rgba(7,12,27,.98);
-    box-shadow: 0 14px 35px rgba(0,0,0,.42);
-    backdrop-filter: blur(18px);
-}
-
-.nav-dropdown-menu a {
-    display: block;
-    margin: 0 !important;
-    padding: 10px 12px;
-    border-radius: 7px;
-    white-space: nowrap;
-}
-
-.nav-dropdown-menu a:hover,
-.nav-dropdown-menu a:focus-visible {
-    background: rgba(215,168,62,.12);
-    outline-offset: 2px;
-}
-
-.container {
-    position: relative;
-    z-index: 1;
-    max-width: 1150px;
-
-    margin: auto;
-
-    padding: 45px 20px;
-}
-
-.hero {
-    position: relative;
-    z-index: 1;
-    text-align: center;
-
-    padding: 76px 20px 110px;
-}
-
-.hero::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    bottom: 30px;
-    width: min(720px, 80vw);
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--gold), transparent);
-    opacity: .5;
-}
-
-.hero-emblem {
-    display: inline-grid;
-    place-items: center;
-    width: 106px;
-    height: 106px;
-    margin-bottom: 10px;
-    border: 1px solid rgba(215,168,62,.68);
-    border-radius: 50% 47% 53% 44%;
-    color: var(--sun);
-    font-family: "Noto Sans Gurmukhi", "Segoe UI Symbol", serif;
-    font-size: 60px;
-    line-height: 1;
-    box-shadow: 0 0 0 10px rgba(215,168,62,.04), 0 0 50px rgba(215,168,62,.22);
-    animation: seal-float 7s ease-in-out infinite;
-}
-
-@keyframes seal-float {
-    0%, 100% { transform: translateY(0) rotate(-3deg); border-radius: 50% 47% 53% 44%; }
-    50% { transform: translateY(-8px) rotate(3deg); border-radius: 46% 54% 45% 55%; }
-}
-
-.hero h1 {
-    font-size:
-        clamp(
-            50px,
-            8vw,
-            90px
-        );
-
-    margin: 15px 0;
-    animation: title-rise .9s cubic-bezier(.2,.8,.2,1) both;
-}
-
-@keyframes title-rise {
-    from { opacity: 0; transform: translateY(18px); letter-spacing: .04em; }
-    to { opacity: 1; transform: translateY(0); letter-spacing: 0; }
-}
-
-h1 {
-    font-size: 42px;
-}
-
-h2 {
-    color: var(--sun);
-}
-
-.card {
-    position: relative;
-    overflow: hidden;
-    background: linear-gradient(145deg, rgba(255,255,255,.09), rgba(255,255,255,.025));
-
-    border:
-        1px solid
-        var(--line);
-
-    border-radius: 18px 18px 26px 16px;
-
-    padding: 28px;
-
-    margin-bottom: 20px;
-    box-shadow: 0 18px 50px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.08);
-    animation: surface-in .65s ease both;
-}
-
-.card::before {
-    content: "";
-    position: absolute;
-    top: -70px;
-    right: -50px;
-    width: 180px;
-    height: 110px;
-    border-radius: 48% 52% 42% 58%;
-    background: rgba(215,168,62,.1);
-    filter: blur(4px);
-    transform: rotate(-18deg);
-    pointer-events: none;
-}
-
-@keyframes surface-in {
-    from { opacity: 0; transform: translateY(12px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-.card:nth-child(2) { animation-delay: .08s; }
-.card:nth-child(3) { animation-delay: .16s; }
-.card:nth-child(4) { animation-delay: .24s; }
-
-.grid {
-    display: grid;
-
-    grid-template-columns:
-        repeat(
-            auto-fit,
-            minmax(240px, 1fr)
-        );
-
-    gap: 20px;
-}
-
-.center {
-    text-align: center;
-}
-
-.muted {
-    color: #aeb4c8;
-
-    line-height: 1.6;
-}
-
-.small {
-    color: #9b9eb3;
-
-    font-size: 13px;
-
-    letter-spacing: 1px;
-}
-
-.stat {
-    color: var(--sun);
-
-    font-size: 36px;
-
-    font-weight: bold;
-
-    margin: 8px 0;
-}
-
-input,
-textarea,
-select {
-    width: 100%;
-
-    padding: 14px;
-
-    margin:
-        7px 0
-        17px;
-
-    border-radius: 10px;
-
-    border:
-        1px solid
-        rgba(255,255,255,.15);
-
-    background: #080d1b;
-
-    color: white;
-
-    font-size: 15px;
-    outline: none;
-    transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
-}
-
-input:focus,
-textarea:focus,
-select:focus {
-    border-color: var(--gold);
-    background: #0d1325;
-    box-shadow: 0 0 0 3px rgba(215,168,62,.18);
-}
-
-textarea {
-    min-height: 100px;
-
-    resize: vertical;
-
-    font-family: Arial;
-}
-
-button,
-.button {
-    display: inline-block;
-
-    padding: 13px 20px;
-
-    border: none;
-
-    border-radius: 10px;
-
-    background:
-        linear-gradient(
-            135deg,
-            var(--sun),
-            var(--gold)
-        );
-
-    color: #061a2b;
-
-    font-weight: bold;
-
-    text-decoration: none;
-
-    cursor: pointer;
-    position: relative;
-    overflow: hidden;
-    transition: transform .22s ease, box-shadow .22s ease;
-}
-
-button::after,
-.button::after {
-    content: "";
-    position: absolute;
-    top: -40%;
-    bottom: -40%;
-    left: -40%;
-    width: 24%;
-    background: rgba(255,255,255,.42);
-    transform: rotate(20deg) translateX(-160%);
-    transition: transform .65s ease;
-}
-
-button:hover::after,
-.button:hover::after {
-    transform: rotate(20deg) translateX(700%);
-}
-
-button:hover,
-.button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(215,168,62,.22);
-}
-
-.dark-button {
-    background:
-        rgba(255,255,255,.08);
-
-    color: white;
-}
-
-.danger {
-    background: #7d3140;
-
-    color: white;
-}
-
-.success {
-    color: #70e0a0;
-}
-
-.warning {
-    color: var(--sun);
-}
-
-.alert {
-    padding: 15px;
-
-    margin-bottom: 20px;
-
-    border-radius: 10px;
-
-    background:
-        rgba(244,204,92,.1);
-
-    border:
-        1px solid
-        rgba(244,204,92,.25);
-}
-
-.error {
-    background:
-        rgba(200,50,50,.15);
-
-    border:
-        1px solid
-        rgba(255,80,80,.3);
-}
-
-.progress {
-    width: 100%;
-
-    height: 22px;
-
-    background:
-        rgba(255,255,255,.1);
-
-    border-radius: 20px;
-
-    overflow: hidden;
-}
-
-.progress-bar {
-    height: 100%;
-
-    background:
-        linear-gradient(
-            90deg,
-            #9d7220,
-            #ffe18a
-        );
-}
-
-footer {
-    position: relative;
-    z-index: 1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        animation-duration: .01ms !important;
-        animation-iteration-count: 1 !important;
-        scroll-behavior: auto !important;
-    }
-}
-
-table {
-    width: 100%;
-
-    border-collapse: collapse;
-}
-
-th,
-td {
-    padding: 13px;
-
-    border-bottom:
-        1px solid
-        rgba(255,255,255,.1);
-
-    text-align: left;
-}
-
-th {
-    color: var(--sun);
-}
-
-footer {
-    text-align: center;
-
-    padding: 45px;
-
-    color: #777d96;
-}
-
-@media(max-width:700px) {
-
-    nav {
-        padding: 12px 15px;
-
-        flex-wrap: wrap;
-
-        gap: 10px;
-    }
-
-    nav a {
-        margin-left: 7px;
-
-        font-size: 13px;
-    }
-
-    h1 {
-        font-size: 34px;
-    }
-
-    table {
-        font-size: 13px;
-    }
-
-    .hero {
-        padding: 58px 20px 88px;
-    }
-
-    .hero-emblem {
-        width: 84px;
-        height: 84px;
-        font-size: 47px;
-    }
-
-}
-
-.filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end}.filter-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.filter-summary{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.filter-chip{padding:7px 11px;border:1px solid rgba(215,168,62,.25);border-radius:999px;background:rgba(255,255,255,.05);font-size:12px}.capacity-bar{height:8px;border-radius:20px;background:rgba(255,255,255,.1);overflow:hidden;margin:7px 0 10px}.capacity-fill{height:100%;background:linear-gradient(90deg,#4d9f7a,#ffe18a)}.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:7px}.calendar-head,.calendar-day{min-height:72px;padding:8px;border:1px solid rgba(255,255,255,.08);border-radius:9px}.calendar-head{min-height:auto;text-align:center;color:#ffe7a1;font-size:12px}.calendar-day{background:rgba(255,255,255,.025)}.calendar-day.today{border-color:rgba(215,168,62,.65);box-shadow:inset 0 0 0 1px rgba(215,168,62,.2)}.calendar-day.empty{opacity:.25}.calendar-num{font-weight:bold}.calendar-event{display:block;margin-top:5px;padding:4px 5px;border-radius:6px;background:rgba(215,168,62,.13);color:#ffe7a1;text-decoration:none;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.calendar-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.calendar-nav button{padding:8px 12px}.flow-card{margin-top:14px;padding:14px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08)}@media(max-width:700px){.calendar{gap:3px}.calendar-head,.calendar-day{min-height:58px;padding:5px;font-size:11px}.calendar-event{font-size:9px;padding:3px}.filter-grid{grid-template-columns:1fr}}
-.nav-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.nav-actions a{margin-left:0}.translate-button{padding:9px 13px;font-size:13px}.translate-host{display:none!important}.badge{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:rgba(215,168,62,.12);border:1px solid rgba(215,168,62,.28);color:#ffe7a1;font-size:12px;font-weight:700}.table-wrap{overflow-x:auto}.action-panel{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.status-flow{display:grid;grid-template-columns:repeat(5,minmax(90px,1fr));gap:7px}.status-step{padding:8px 5px;border-radius:9px;background:rgba(255,255,255,.05);text-align:center;font-size:11px;color:#9fa8bd}.status-step.active{color:#ffe7a1;border:1px solid rgba(215,168,62,.45)}.progress-label{display:flex;justify-content:space-between;margin-bottom:7px;font-size:13px;color:#c8cede}.pantry-progress{margin:14px 0 18px}.pantry-progress-track{height:10px;border-radius:999px;background:rgba(255,255,255,.09);border:1px solid rgba(215,168,62,.18);overflow:hidden}.pantry-progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#b9872d,#ffe7a1);box-shadow:0 0 16px rgba(215,168,62,.28);transition:width .5s ease}.empty-state{text-align:center;padding:35px 20px}@media(max-width:700px){.status-flow{grid-template-columns:1fr}.nav-actions{width:100%}.container{padding:28px 14px}button,.button{min-height:44px}}
-.qr-menu-button{padding:9px 13px;font-size:13px;cursor:pointer;border:1px solid rgba(215,168,62,.3);border-radius:10px;background:rgba(255,255,255,.05);color:#dce8ef}.qr-menu-button:hover{color:#ffe7a1;border-color:rgba(215,168,62,.65)}.qr-modal{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.72);align-items:center;justify-content:center;padding:20px}.qr-modal.open{display:flex}.qr-box{width:min(360px,100%);text-align:center;background:#0b1020;border:1px solid rgba(215,168,62,.35);border-radius:20px;padding:28px;box-shadow:0 25px 80px rgba(0,0,0,.5)}.qr-box img{width:230px;height:230px;max-width:80vw;background:white;padding:10px;border-radius:12px}.qr-close{margin-top:16px}.qr-url{word-break:break-all;font-size:12px;color:#9fa8bd;margin-top:12px}
-.goog-te-banner-frame,
-.goog-te-banner-frame.skiptranslate,
-iframe.goog-te-banner-frame {
-    display: none !important;
-}
-
-body {
-    top: 0 !important;
-}
-
-#google_translate_element,
-.goog-te-banner-frame,
-iframe.goog-te-banner-frame,
-.goog-te-balloon-frame,
-#goog-gt-tt,
-.goog-tooltip,
-.goog-te-spinner-pos {
-    display: none !important;
-}
-
-.goog-text-highlight {
-    background: transparent !important;
-    box-shadow: none !important;
-}
-
-/* Student-only floating Seva Bot */
-.seva-bot-launcher{position:fixed;right:24px;bottom:24px;z-index:1000;border:1px solid rgba(255,231,161,.55);border-radius:999px;background:linear-gradient(135deg,#d7a83e,#ffe7a1);color:#111827;padding:13px 19px;font-weight:800;box-shadow:0 10px 35px rgba(0,0,0,.42);cursor:pointer}
-.seva-bot-panel{position:fixed;right:24px;bottom:88px;width:min(370px,calc(100vw - 28px));height:min(520px,calc(100vh - 125px));z-index:1001;display:none;flex-direction:column;overflow:hidden;border:1px solid rgba(215,168,62,.55);border-radius:18px;background:#0b1020;box-shadow:0 18px 60px rgba(0,0,0,.6)}
-.seva-bot-panel.open{display:flex}.seva-bot-head{padding:15px 16px;background:linear-gradient(135deg,#111a31,#202b46);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(215,168,62,.25)}
-.seva-bot-head h3{margin:0;color:#ffe7a1;font-size:17px}.seva-bot-head p{margin:4px 0 0;color:#cbd5e1;font-size:12px}.seva-bot-close{background:transparent!important;border:0!important;color:white!important;padding:4px 8px!important;font-size:22px!important}
-.seva-bot-messages{padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;flex:1}.seva-bot-msg{max-width:90%;padding:10px 12px;border-radius:13px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5}.seva-bot-msg.bot{align-self:flex-start;background:#172238;border:1px solid rgba(255,255,255,.08);color:#f1f5f9}.seva-bot-msg.user{align-self:flex-end;background:#d7a83e;color:#111827}.seva-bot-quick{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 10px}.seva-bot-quick button{font-size:11px!important;padding:7px 9px!important;margin:0!important;border-radius:999px!important;background:#18243a!important;border:1px solid rgba(215,168,62,.4)!important;color:#ffe7a1!important}
-.seva-bot-form{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(215,168,62,.22);background:#080d19}.seva-bot-form input{margin:0;min-width:0;flex:1;background:#111a31;color:white;border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:10px}.seva-bot-form button{margin:0!important;padding:9px 12px!important}.seva-bot-note{font-size:10px;color:#94a3b8;padding:0 12px 10px}
-@media(max-width:520px){.seva-bot-launcher{right:14px;bottom:14px}.seva-bot-panel{right:10px;bottom:76px;width:calc(100vw - 20px);height:min(70vh,540px)}}
-
-
-/* Accessibility: visible focus, reduced motion, scalable text, and skip navigation. */
-:focus-visible { outline: 3px solid #ffe7a1 !important; outline-offset: 3px; }
-.skip-link { position:absolute; left:12px; top:-100px; z-index:10000; padding:12px 16px; background:#ffe7a1; color:#111; border-radius:8px; }
-.skip-link:focus { top:12px; }
-body.large-text { font-size: 1.12rem; }
-body.large-text p, body.large-text label, body.large-text input, body.large-text select, body.large-text textarea, body.large-text button, body.large-text td, body.large-text th { font-size: 1.08em; }
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; }
-}
-
-
-/* Smart Seva refresh: cohesive spacing, calmer surfaces, and a polished landing page. */
-:root {
-    --ink: #060b19;
-    --deep: #0b1225;
-    --midnight: #111c35;
-    --gold: #d7a83e;
-    --sun: #ffe7a1;
-    --line: rgba(215,168,62,.24);
-    --surface: rgba(13,22,43,.86);
-    --surface-raised: rgba(22,33,59,.92);
-    --text-main: #f7f8fc;
-    --text-soft: #c0c9dc;
-}
-body {
-    background:
-        radial-gradient(ellipse at 12% 5%, rgba(37,63,112,.26), transparent 34rem),
-        radial-gradient(ellipse at 90% 45%, rgba(95,67,24,.10), transparent 30rem),
-        #030a1d;
-    color: var(--text-main);
-    line-height: 1.6;
-    letter-spacing: .005em;
-}
-nav {
-    min-height: 76px;
-    padding: 12px clamp(16px, 4vw, 56px);
-    gap: 18px;
-    background: rgba(4,9,22,.88);
-    border-bottom: 1px solid rgba(215,168,62,.2);
-    backdrop-filter: blur(22px);
-    animation: none;
-}
-.logo { flex-shrink: 0; font-size: 16px; letter-spacing: .1em; }
-.logo-mark { font-size: 34px; }
-.logout-form { display: inline; margin: 0; }
-.nav-logout { background: transparent; border: 0; color: white; cursor: pointer; font: inherit; padding: 8px 10px; }
-.nav-logout:hover { color: var(--sun); }
-
-.nav-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 5px;
-    flex: 1;
-    min-width: 0;
-}
-nav a, .nav-dropdown > summary {
-    margin: 0;
-    padding: 9px 11px;
-    border-radius: 10px;
-    font-size: 13px;
-    font-weight: 600;
-    line-height: 1.3;
-    color: #e6eaf4;
-    transition: background .18s ease, color .18s ease, border-color .18s ease;
-}
-nav a:hover, nav a:focus-visible {
-    color: var(--sun);
-    background: rgba(215,168,62,.09);
-    text-shadow: none;
-}
-.nav-dropdown > summary {
-    border-color: transparent;
-    background: transparent;
-}
-.nav-dropdown > summary:hover, .nav-dropdown[open] > summary {
-    background: rgba(255,255,255,.055);
-}
-.nav-dropdown-menu {
-    min-width: 215px;
-    padding: 9px;
-    border-color: rgba(215,168,62,.3);
-    background: rgba(7,13,29,.985);
-}
-.nav-dropdown-menu a { padding: 11px 12px; font-size: 13px; }
-.nav-actions .dark-button, .nav-actions .qr-menu-button, .nav-actions .translate-button {
-    padding: 9px 10px;
-    font-size: 12px;
-    white-space: nowrap;
-}
-.container {
-    width: min(100%, 1280px);
-    padding: clamp(28px, 4vw, 52px) clamp(16px, 3vw, 32px);
-}
-h1, h2, h3 { line-height: 1.2; letter-spacing: -.025em; }
-h1 { font-size: clamp(2rem, 4vw, 3.15rem); }
-h2 { font-size: clamp(1.45rem, 2.5vw, 2.05rem); }
-h3 { font-size: 1.12rem; }
-p { max-width: 78ch; }
-.card {
-    background: linear-gradient(145deg, rgba(18,30,55,.92), rgba(9,17,35,.91));
-    border: 1px solid rgba(178,194,225,.13);
-    border-radius: 18px;
-    padding: clamp(20px, 2.4vw, 30px);
-    box-shadow: 0 16px 42px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.035);
-    animation: none;
-}
-.card::before { opacity: .55; }
-.grid { gap: 18px; }
-input, textarea, select {
-    border-radius: 11px;
-    border-color: rgba(190,204,229,.2);
-    background: rgba(4,10,23,.8);
-    color: #fff;
-}
-input::placeholder, textarea::placeholder { color: #929db4; }
-button, .button {
-    border-radius: 11px;
-    font-weight: 750;
-    min-height: 42px;
-    box-shadow: 0 4px 14px rgba(0,0,0,.12);
-}
-.dark-button {
-    border: 1px solid rgba(215,168,62,.28);
-    background: rgba(255,255,255,.045);
-    color: #f4f6fb;
-}
-button:focus-visible, .button:focus-visible, a:focus-visible, summary:focus-visible,
-input:focus-visible, textarea:focus-visible, select:focus-visible {
-    outline: 3px solid #ffe7a1;
-    outline-offset: 3px;
-}
-.table-wrap { border: 1px solid rgba(190,204,229,.13); border-radius: 14px; }
-table { min-width: 560px; }
-th { background: rgba(215,168,62,.08); }
-th, td { padding: 14px 16px; border-bottom-color: rgba(190,204,229,.12); }
-tr:last-child td { border-bottom: 0; }
-footer { padding: 34px 20px; color: #8f9bb3; font-size: 13px; letter-spacing: .04em; }
-
-/* Public landing page */
-.landing-hero {
-    position: relative;
-    z-index: 1;
-    width: min(1200px, calc(100% - 40px));
-    margin: 0 auto;
-    padding: clamp(48px, 7vw, 94px) 0 clamp(44px, 6vw, 76px);
-    display: grid;
-    grid-template-columns: minmax(0, 1.04fr) minmax(330px, .86fr);
-    align-items: center;
-    gap: clamp(36px, 6vw, 82px);
-}
-.landing-copy { position: relative; z-index: 2; }
-.eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 9px;
-    color: var(--sun);
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: .16em;
-    line-height: 1.5;
-}
-.eyebrow-dot, .live-dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: var(--sun);
-    box-shadow: 0 0 14px rgba(255,231,161,.65);
-    display: inline-block;
-}
-.landing-copy h1 {
-    max-width: 680px;
-    margin: 22px 0 18px;
-    font-size: clamp(3rem, 6vw, 5.25rem);
-    font-weight: 800;
-    line-height: 1.02;
-    letter-spacing: -.055em;
-    animation: title-rise .7s ease both;
-}
-.landing-copy h1 .gold { display: inline; }
-.landing-lead {
-    max-width: 590px;
-    color: #c1cbe0;
-    font-size: clamp(16px, 1.6vw, 19px);
-    line-height: 1.8;
-    margin: 0 0 27px;
-}
-.hero-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-.hero-actions .button { padding: 14px 20px; }
-.hero-trust {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px 18px;
-    margin-top: 29px;
-    color: #b8c2d7;
-    font-size: 12px;
-}
-.trust-check { color: var(--sun); font-weight: 900; margin-right: 5px; }
-.landing-showcase {
-    position: relative;
-    isolation: isolate;
-    overflow: hidden;
-    padding: 27px;
-    border: 1px solid rgba(215,168,62,.27);
-    border-radius: 25px;
-    background: linear-gradient(150deg, rgba(19,32,59,.96), rgba(7,14,31,.94));
-    box-shadow: 0 30px 100px rgba(0,0,0,.32), 0 0 60px rgba(215,168,62,.055);
-}
-.landing-showcase::before {
-    content: "";
-    position: absolute; z-index: -1;
-    width: 300px; height: 300px; top: -140px; right: -100px;
-    border-radius: 50%;
-    background: rgba(215,168,62,.11);
-    filter: blur(35px);
-}
-.showcase-orbit {
-    position: absolute; z-index: -1; border: 1px solid rgba(255,231,161,.1);
-    border-radius: 50%; pointer-events: none;
-}
-.orbit-one { width: 340px; height: 340px; top: 50px; right: -140px; }
-.orbit-two { width: 260px; height: 260px; top: 90px; right: -100px; }
-.showcase-topline { display: flex; align-items: center; gap: 9px; color: #aebbd2; font-size: 10px; font-weight: 800; letter-spacing: .15em; }
-.showcase-emblem {
-    display: grid; place-items: center; width: 70px; height: 70px;
-    margin: 26px 0 18px; border: 1px solid rgba(255,231,161,.46);
-    border-radius: 50%; color: var(--sun); font-size: 42px;
-    box-shadow: 0 0 0 8px rgba(215,168,62,.035), 0 0 36px rgba(215,168,62,.12);
-}
-.showcase-title { font-size: clamp(22px, 2.4vw, 30px); line-height: 1.25; font-weight: 800; letter-spacing: -.035em; }
-.showcase-steps { display: grid; gap: 9px; margin-top: 25px; }
-.showcase-step {
-    display: grid; grid-template-columns: 38px 1fr 20px; gap: 12px; align-items: center;
-    padding: 13px 14px; border: 1px solid rgba(190,204,229,.1);
-    border-radius: 13px; background: rgba(255,255,255,.035);
-}
-.step-number { color: var(--sun); font-size: 12px; font-weight: 800; }
-.showcase-step strong { display: block; font-size: 13px; }
-.showcase-step small { display: block; margin-top: 2px; color: #9eabc3; font-size: 11px; }
-.step-arrow { color: var(--sun); text-align: right; }
-.showcase-footnote { margin-top: 18px; color: #8f9bb3; font-size: 11px; text-align: center; letter-spacing: .04em; }
-.landing-section {
-    position: relative; z-index: 1;
-    padding: clamp(44px, 6vw, 78px) max(20px, calc((100% - 1200px)/2));
-    border-top: 1px solid rgba(190,204,229,.08);
-    background: linear-gradient(180deg, rgba(7,14,29,.68), rgba(5,11,24,.42));
-}
-.section-intro { max-width: 680px; margin-bottom: 29px; }
-.section-intro h2 { margin: 13px 0 10px; font-size: clamp(27px, 3.4vw, 40px); }
-.section-intro p { margin: 0; line-height: 1.75; }
-.landing-features { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 15px; }
-.feature-card {
-    display: flex; flex-direction: column; align-items: flex-start;
-    min-height: 265px; padding: 23px 21px;
-    border: 1px solid rgba(190,204,229,.12); border-radius: 17px;
-    background: linear-gradient(150deg, rgba(17,29,54,.88), rgba(8,15,31,.88));
-    transition: transform .2s ease, border-color .2s ease, background .2s ease;
-}
-.feature-card:hover { transform: translateY(-4px); border-color: rgba(215,168,62,.4); background: rgba(18,30,55,.96); }
-.feature-icon {
-    display: grid; place-items: center; width: 43px; height: 43px;
-    margin-bottom: 20px; border-radius: 12px; color: var(--sun);
-    background: rgba(215,168,62,.1); border: 1px solid rgba(215,168,62,.2); font-size: 22px;
-}
-.feature-label { color: #d8b65e; font-size: 10px; font-weight: 800; letter-spacing: .15em; }
-.feature-card h3 { margin: 8px 0; font-size: 17px; }
-.feature-card p { margin: 0 0 18px; font-size: 13px; line-height: 1.75; }
-.feature-link { margin-top: auto; color: var(--sun); font-size: 12px; font-weight: 800; text-decoration: none; }
-.feature-link:hover { color: #fff1c4; text-decoration: underline; text-underline-offset: 4px; }
-.landing-cta {
-    position: relative; z-index: 1;
-    display: grid; grid-template-columns: 62px 1fr auto; align-items: center; gap: 23px;
-    width: min(1200px, calc(100% - 40px)); margin: 44px auto 70px;
-    padding: 27px 30px; border: 1px solid rgba(215,168,62,.25); border-radius: 20px;
-    background: linear-gradient(115deg, rgba(215,168,62,.09), rgba(17,29,54,.84) 44%, rgba(17,29,54,.58));
-}
-.cta-emblem { display: grid; place-items: center; width: 58px; height: 58px; border: 1px solid rgba(255,231,161,.45); border-radius: 50%; color: var(--sun); font-size: 34px; }
-.landing-cta h2 { margin: 6px 0; font-size: clamp(22px, 2.5vw, 31px); }
-.landing-cta p { margin: 0; font-size: 13px; }
-.cta-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.cta-actions .button { white-space: nowrap; }
-@media (max-width: 1100px) {
-    nav { align-items: flex-start; }
-    .nav-actions { flex-wrap: wrap; }
-    .landing-features { grid-template-columns: repeat(2, minmax(0,1fr)); }
-}
-@media (max-width: 820px) {
-    .landing-hero { grid-template-columns: 1fr; width: min(100% - 32px, 680px); gap: 36px; padding-top: 48px; }
-    .landing-copy h1 { max-width: 620px; font-size: clamp(2.8rem, 9vw, 4.5rem); }
-    .landing-showcase { max-width: 580px; width: 100%; margin: 0 auto; }
-    .landing-section { padding: 45px 20px; }
-    .landing-cta { grid-template-columns: 52px 1fr; gap: 16px; }
-    .cta-emblem { width: 50px; height: 50px; }
-    .cta-actions { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; justify-content: flex-start; }
-}
-@media (max-width: 700px) {
-    nav { position: sticky; padding: 13px 14px; align-items: stretch; gap: 12px; }
-    .logo { justify-content: center; font-size: 15px; }
-    .nav-actions { justify-content: center; gap: 5px; }
-    .nav-actions > a, .nav-actions > .nav-dropdown > summary { padding: 9px 8px; font-size: 12px; }
-    .nav-actions .dark-button, .nav-actions .qr-menu-button, .nav-actions .translate-button { padding: 8px; font-size: 11px; }
-    .nav-dropdown-menu { position: absolute; left: 0; right: auto; max-width: calc(100vw - 24px); }
-    .landing-features { grid-template-columns: 1fr; }
-    .feature-card { min-height: 0; }
-    .hero-trust { display: grid; gap: 9px; }
-    .landing-cta { width: calc(100% - 28px); padding: 22px 19px; margin: 30px auto 45px; }
-    .landing-cta .button { white-space: normal; }
-    .showcase-step { grid-template-columns: 30px 1fr 18px; padding: 12px; }
-    .card { padding: 20px; }
-    .status-flow { grid-template-columns: 1fr; }
-    .table-wrap { max-width: 100%; }
-}
-@media (prefers-reduced-motion: reduce) {
-    .feature-card { transition: none; }
-    .feature-card:hover { transform: none; }
-}
-
-
-/* Personalized student dashboard and admin command center. */
-.dashboard-welcome-strip {
-    display:flex; align-items:center; justify-content:space-between; gap:24px;
-    margin:24px 0 20px; padding:clamp(22px,3vw,34px);
-    border:1px solid rgba(215,168,62,.27); border-radius:20px;
-    background:linear-gradient(115deg,rgba(215,168,62,.12),rgba(17,29,54,.88) 55%,rgba(8,15,31,.9));
-}
-.dashboard-welcome-strip h2 { margin:8px 0; font-size:clamp(22px,3vw,30px); }
-.dashboard-welcome-strip p { margin:0; max-width:650px; }
-.eyebrow { color:#d8b65e; font-size:10px; font-weight:850; letter-spacing:.16em; }
-.dashboard-quick-actions,.admin-quick-actions { display:flex; flex-wrap:wrap; align-items:center; gap:9px; }
-.dashboard-stat-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
-.dashboard-action-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:18px 0 24px; }
-.dashboard-action-card { display:flex; align-items:center; gap:12px; min-width:0; padding:17px; text-decoration:none; border:1px solid rgba(190,204,229,.13); border-radius:15px; background:rgba(13,22,43,.78); transition:border-color .18s ease, transform .18s ease; }
-.dashboard-action-card:hover { border-color:rgba(215,168,62,.55); transform:translateY(-2px); }
-.dashboard-action-card > span:nth-child(2) { display:flex; flex-direction:column; gap:4px; min-width:0; }
-.dashboard-action-card strong { color:#f7f8fc; }
-.dashboard-action-card small { color:#9eabc4; line-height:1.45; }
-.dashboard-action-icon { display:grid; place-items:center; width:39px; height:39px; flex:0 0 39px; border-radius:12px; color:#ffe7a1; background:rgba(215,168,62,.12); font-size:20px; }
-.dashboard-action-arrow { margin-left:auto; color:#ffe7a1; font-size:20px; }
-.section-heading-row { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px; }
-.section-heading-row h2 { margin:5px 0 0; }
-.section-heading-row p { margin:7px 0 0; }
-.section-heading-row > a { flex:0 0 auto; color:#ffe7a1; font-weight:750; text-decoration:none; }
-.recommended-seva-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px; }
-.recommended-seva-card { display:flex; flex-direction:column; min-width:0; padding:18px; border:1px solid rgba(190,204,229,.13); border-radius:15px; background:rgba(3,9,23,.45); }
-.recommended-seva-date { color:#ffe7a1; font-size:12px; font-weight:750; }
-.recommended-seva-card h3 { margin:10px 0 5px; }
-.recommended-seva-card p { font-size:13px; margin:5px 0; }
-.recommended-seva-footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px; margin-top:auto; padding-top:14px; }
-.recommended-seva-footer > span { color:#b7c3d8; font-size:12px; }
-.admin-quick-actions { margin:22px 0; }
-.admin-overview-grid { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:17px; margin-bottom:20px; }
-.admin-overview-panel { min-width:0; }
-.admin-upcoming-list,.admin-activity-list { display:flex; flex-direction:column; }
-.admin-upcoming-item { display:flex; align-items:center; gap:12px; padding:13px 0; border-bottom:1px solid rgba(190,204,229,.1); }
-.admin-upcoming-item:last-child,.admin-activity-item:last-child { border-bottom:0; }
-.admin-upcoming-date { display:flex; flex-direction:column; align-items:center; justify-content:center; flex:0 0 54px; min-height:54px; border:1px solid rgba(215,168,62,.22); border-radius:12px; background:rgba(215,168,62,.08); color:#ffe7a1; }
-.admin-upcoming-date strong { font-size:15px; }
-.admin-upcoming-date small,.admin-upcoming-capacity small { font-size:10px; color:#9eabc4; }
-.admin-upcoming-main { display:flex; flex:1; flex-direction:column; gap:4px; min-width:0; }
-.admin-upcoming-main strong { color:#f7f8fc; }
-.admin-upcoming-main span { color:#9eabc4; font-size:12px; }
-.admin-upcoming-capacity { text-align:right; color:#ffe7a1; font-size:13px; white-space:nowrap; }
-.admin-upcoming-capacity small { display:block; }
-.admin-activity-item { display:flex; align-items:flex-start; gap:10px; padding:12px 0; border-bottom:1px solid rgba(190,204,229,.1); }
-.admin-activity-dot { flex:0 0 8px; width:8px; height:8px; margin-top:7px; border-radius:50%; background:#d7a83e; box-shadow:0 0 12px rgba(215,168,62,.3); }
-.admin-activity-item > div { flex:1; min-width:0; }
-.admin-activity-item strong { color:#f7f8fc; font-size:13px; }
-.admin-activity-item p { margin:4px 0 0; font-size:12px; }
-.admin-activity-item time { color:#8e9bb3; font-size:10px; white-space:nowrap; }
-@media(max-width:900px) {
-    .dashboard-stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .recommended-seva-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .admin-overview-grid { grid-template-columns:1fr; }
-}
-@media(max-width:650px) {
-    .dashboard-welcome-strip { flex-direction:column; align-items:flex-start; }
-    .dashboard-action-grid,.recommended-seva-grid { grid-template-columns:1fr; }
-    .dashboard-stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .section-heading-row { align-items:flex-start; }
-    .admin-upcoming-item { gap:8px; }
-    .admin-activity-item time { max-width:85px; white-space:normal; text-align:right; }
-}
-
-/* Whole-site page system: shared visual language across student and admin screens. */
-main { position: relative; z-index: 1; min-height: 62vh; }
-main > .container,
-main > .page-shell,
-main > .dashboard-container {
-    width: min(1240px, calc(100% - 44px));
-    margin: 0 auto;
-    padding: clamp(28px, 4vw, 54px) 0 64px;
-}
-main .container > h1,
-main .page-shell > h1,
-main .dashboard-container > h1 {
-    margin: 0 0 12px;
-    font-size: clamp(30px, 4vw, 43px);
-    line-height: 1.16;
-    letter-spacing: -.035em;
-    color: #fff;
-}
-main h2 { color: #fff4d0; letter-spacing: -.018em; }
-main h3 { color: #f8e7b4; }
-main p, main li { color: #d2d9e8; }
-main .muted, main .subtitle, main .help-text { color: #9eabc4; }
-main .card,
-main .panel,
-main .stat-card,
-main .section-card {
-    background: linear-gradient(145deg, rgba(17,29,54,.92), rgba(7,14,30,.92));
-    border: 1px solid rgba(190,204,229,.14);
-    border-radius: 18px;
-    box-shadow: 0 14px 36px rgba(0,0,0,.16);
-}
-main .card { padding: clamp(18px, 2.5vw, 28px); }
-main .card h2:first-child, main .card h3:first-child { margin-top: 0; }
-main .grid { gap: 18px; }
-main .stat {
-    color: #ffe7a1;
-    font-size: clamp(30px, 4vw, 42px);
-    font-weight: 800;
-    line-height: 1.15;
-}
-main .button, main button, main input[type="submit"] {
-    border-radius: 10px;
-    font-weight: 700;
-    transition: transform .16s ease, border-color .16s ease, background .16s ease;
-}
-main .button:hover, main button:hover, main input[type="submit"]:hover {
-    transform: translateY(-1px);
-}
-main input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]),
-main select, main textarea {
-    width: 100%;
-    max-width: 100%;
-    min-height: 44px;
-    padding: 11px 13px;
-    color: #f7f8fc;
-    background: rgba(3,9,23,.78);
-    border: 1px solid rgba(190,204,229,.22);
-    border-radius: 10px;
-}
-main input:focus, main select:focus, main textarea:focus {
-    border-color: rgba(255,231,161,.75);
-    box-shadow: 0 0 0 3px rgba(215,168,62,.12);
-    outline: none;
-}
-main select option { background: #101a30; color: #fff; }
-main label { display: inline-block; margin-bottom: 6px; color: #e7ebf5; font-weight: 600; }
-main form { min-width: 0; }
-main table { border-collapse: separate; border-spacing: 0; overflow: hidden; border-radius: 12px; }
-main th { background: rgba(215,168,62,.10); color: #ffe7a1; font-weight: 800; }
-main td, main th { padding: 13px 14px; border-bottom: 1px solid rgba(190,204,229,.12); }
-main tbody tr { background: rgba(11,19,37,.42); }
-main tbody tr:hover { background: rgba(215,168,62,.055); }
-main a:not(.button):not(.calendar-event) { text-underline-offset: 3px; }
-main .badge { white-space: nowrap; }
-main hr { border: 0; border-top: 1px solid rgba(190,204,229,.14); margin: 24px 0; }
-main .empty-state { border: 1px dashed rgba(215,168,62,.3); border-radius: 16px; background: rgba(13,22,43,.55); }
-footer { position: relative; z-index: 1; border-top: 1px solid rgba(215,168,62,.14); background: rgba(3,8,20,.38); }
-@media (max-width: 700px) {
-    main > .container, main > .page-shell, main > .dashboard-container {
-        width: calc(100% - 28px);
-        padding: 28px 0 44px;
-    }
-    main .card { padding: 18px; }
-    main .grid { gap: 12px; }
-    main td, main th { padding: 10px; }
-}
-@media (prefers-reduced-motion: reduce) {
-    main .button, main button, main input[type="submit"] { transition: none; }
-    main .button:hover, main button:hover, main input[type="submit"]:hover { transform: none; }
-}
-
-/* Night sky: individually twinkling canvas stars, shooting stars, and a glowing Ik Onkar. */
-.night-sky::before, .night-sky::after { animation: none; opacity: .18; }
-#star-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.night-sky::selection { background: transparent; }
-
-.ik-constellation {
-    color: rgba(255,231,161,.2);
-    animation: ik-drift 18s ease-in-out infinite alternate, ik-glow 4.5s ease-in-out infinite;
-}
-@keyframes ik-glow {
-    0%, 100% { text-shadow: 0 0 10px rgba(215,168,62,.18), 0 0 30px rgba(215,168,62,.08); }
-    50% { text-shadow: 0 0 22px rgba(255,231,161,.55), 0 0 60px rgba(215,168,62,.32); }
-}
-
-.ik-halo {
-    position: absolute;
-    left: 50%;
-    top: 46%;
-    transform: translate(-50%, -50%);
-    font-family: "Noto Sans Gurmukhi", "Segoe UI Symbol", serif;
-    font-size: clamp(220px, 38vw, 520px);
-    line-height: 1;
-    background: linear-gradient(110deg, rgba(215,168,62,.05) 20%, rgba(255,231,161,.30) 48%, rgba(215,168,62,.05) 76%);
-    background-size: 250% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    filter: drop-shadow(0 0 28px rgba(215,168,62,.22));
-    animation: ik-shimmer 9s ease-in-out infinite alternate, ik-halo-pulse 6s ease-in-out infinite;
-    user-select: none;
-}
-@keyframes ik-shimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }
-@keyframes ik-halo-pulse {
-    0%, 100% { opacity: .55; transform: translate(-50%, -50%) scale(.97); }
-    50% { opacity: 1; transform: translate(-50%, -50%) scale(1.03); }
-}
-
-.logo-mark {
-    background: linear-gradient(100deg, #b9872d 0%, #ffe7a1 45%, #d7a83e 60%, #b9872d 100%);
-    background-size: 220% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    filter: drop-shadow(0 0 8px rgba(215,168,62,.55));
-    animation: emblem-breathe 5s ease-in-out infinite, logo-shine 4s linear infinite;
-}
-@keyframes logo-shine { from { background-position: 200% 0; } to { background-position: -20% 0; } }
-
-.hero-emblem, .showcase-emblem, .cta-emblem {
-    animation: emblem-aura 4.5s ease-in-out infinite;
-}
-@keyframes emblem-aura {
-    0%, 100% { text-shadow: 0 0 14px rgba(215,168,62,.35); filter: drop-shadow(0 0 6px rgba(215,168,62,.25)); }
-    50% { text-shadow: 0 0 34px rgba(255,231,161,.85); filter: drop-shadow(0 0 20px rgba(255,231,161,.5)); }
-}
-
-footer { animation: footer-twinkle 5s ease-in-out infinite; }
-@keyframes footer-twinkle { 0%, 100% { color: #777d96; } 50% { color: #ffe7a1; text-shadow: 0 0 14px rgba(215,168,62,.4); } }
-
-main .card { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
-main .card:hover {
-    transform: translateY(-3px);
-    border-color: rgba(255,231,161,.5);
-    box-shadow: 0 14px 44px rgba(0,0,0,.35), 0 0 26px rgba(215,168,62,.16);
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .ik-halo, .ik-constellation, .logo-mark, .hero-emblem, .showcase-emblem, .cta-emblem, footer { animation: none !important; }
-    main .card:hover { transform: none; }
-}
-
-</style>
-"""
 
 
 # ============================================================
@@ -1914,6 +708,57 @@ def qr_code():
 # LAYOUT
 # ============================================================
 
+# Navigation is described as data so every role shares one renderer.
+# Each entry is either (label, href) or (label, [(label, href), ...]) for a dropdown.
+COMMUNITY_MENU = ("Community", [("My Calendar", "/my-calendar"), ("Community Impact", "/impact")])
+ROLE_NAV = {
+    "admin": [
+        ("Dashboard", "/admin"),
+        ("Manage", [("Manage Seva", "/admin/seva"), ("Manage Paath", "/admin/paath"),
+                    ("Manage Pantry", "/admin/pantry"), ("Manage Events", "/admin/events")]),
+        ("Community", [("Activity Log", "/admin/activity-log"), ("My Calendar", "/my-calendar"),
+                       ("Community Impact", "/impact")]),
+    ],
+    "seva_admin": [("Manage Seva", "/admin/seva"),
+                   ("Explore", [("Seva", "/seva"), ("Events", "/events")]), COMMUNITY_MENU],
+    "paath_admin": [("Manage Paath", "/admin/paath"),
+                    ("Explore", [("Paath", "/paath"), ("Events", "/events")]), COMMUNITY_MENU],
+    "pantry_admin": [("Manage Pantry", "/admin/pantry"),
+                     ("Explore", [("Pantry", "/pantry"), ("Events", "/events")]), COMMUNITY_MENU],
+    "events_admin": [("Manage Events", "/admin/events"), COMMUNITY_MENU],
+    "student": [
+        ("Dashboard", "/dashboard"),
+        ("Explore", [("Seva Opportunities", "/seva"), ("Paath Sponsorship", "/paath"),
+                     ("Food Pantry", "/pantry"), ("Special Events", "/events")]),
+        ("My Seva", [("My Calendar", "/my-calendar"), ("My Profile", "/profile"),
+                     ("Notifications", "/notifications")]),
+        ("Community Impact", "/impact"),
+    ],
+}
+
+
+def build_nav(user, notification_badge=""):
+    """Render the top-bar links for the signed-in user (or visitors)."""
+    if not user:
+        return '<a href="/login">Login</a><a href="/register">Register</a>'
+
+    parts = []
+    for label, target in ROLE_NAV.get(user["role"], ROLE_NAV["student"]):
+        if isinstance(target, str):
+            parts.append(f'<a href="{target}">{h(label)}</a>')
+            continue
+        links = []
+        for item_label, href in target:
+            badge = f" {notification_badge}" if href == "/notifications" else ""
+            links.append(f'<a href="{href}">{h(item_label)}{badge}</a>')
+        parts.append(
+            f'<details class="nav-dropdown"><summary>{h(label)}</summary>'
+            f'<div class="nav-dropdown-menu">{"".join(links)}</div></details>'
+        )
+    parts.append('<a href="/logout">Logout</a>')
+    return "".join(parts)
+
+
 def layout(content, title="Smart Seva"):
 
     user = current_user()
@@ -1929,130 +774,12 @@ def layout(content, title="Smart Seva"):
 
     notification_link = f'<span class="badge">{unread_count}</span>' if unread_count else ""
 
-    if user:
+    nav = build_nav(user, notification_link)
 
-        if user["role"] == "admin":
-            nav = """
-                <a href="/admin">Dashboard</a>
-                <details class="nav-dropdown">
-                    <summary>Manage</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/admin/seva">Manage Seva</a>
-                        <a href="/admin/paath">Manage Paath</a>
-                        <a href="/admin/pantry">Manage Pantry</a>
-                        <a href="/admin/events">Manage Events</a>
-                    </div>
-                </details>
-                <details class="nav-dropdown">
-                    <summary>Community</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/admin/activity-log">Activity Log</a>
-                        <a href="/my-calendar">My Calendar</a>
-                        <a href="/impact">Community Impact</a>
-                    </div>
-                </details>
-                <a href="/logout">Logout</a>
-            """
-        elif user["role"] == "seva_admin":
-            nav = """
-                <a href="/admin/seva">Manage Seva</a>
-                <details class="nav-dropdown">
-                    <summary>Explore</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/seva">Seva</a>
-                        <a href="/events">Events</a>
-                    </div>
-                </details>
-                <details class="nav-dropdown">
-                    <summary>Community</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/my-calendar">My Calendar</a>
-                        <a href="/impact">Community Impact</a>
-                    </div>
-                </details>
-                <a href="/logout">Logout</a>
-            """
-        elif user["role"] == "paath_admin":
-            nav = """
-                <a href="/admin/paath">Manage Paath</a>
-                <details class="nav-dropdown">
-                    <summary>Explore</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/paath">Paath</a>
-                        <a href="/events">Events</a>
-                    </div>
-                </details>
-                <details class="nav-dropdown">
-                    <summary>Community</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/my-calendar">My Calendar</a>
-                        <a href="/impact">Community Impact</a>
-                    </div>
-                </details>
-                <a href="/logout">Logout</a>
-            """
-        elif user["role"] == "pantry_admin":
-            nav = """
-                <a href="/admin/pantry">Manage Pantry</a>
-                <details class="nav-dropdown">
-                    <summary>Explore</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/pantry">Pantry</a>
-                        <a href="/events">Events</a>
-                    </div>
-                </details>
-                <details class="nav-dropdown">
-                    <summary>Community</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/my-calendar">My Calendar</a>
-                        <a href="/impact">Community Impact</a>
-                    </div>
-                </details>
-                <a href="/logout">Logout</a>
-            """
-        elif user["role"] == "events_admin":
-            nav = """
-                <a href="/admin/events">Manage Events</a>
-                <details class="nav-dropdown">
-                    <summary>Community</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/my-calendar">My Calendar</a>
-                        <a href="/impact">Community Impact</a>
-                    </div>
-                </details>
-                <a href="/logout">Logout</a>
-            """
-        else:
-            nav = """
-                <a class="nav-primary-link" href="/dashboard">Dashboard</a>
-                <details class="nav-dropdown">
-                    <summary>Explore</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/seva">Seva Opportunities</a>
-                        <a href="/paath">Paath Sponsorship</a>
-                        <a href="/pantry">Food Pantry</a>
-                        <a href="/events">Special Events</a>
-                    </div>
-                </details>
-                <details class="nav-dropdown">
-                    <summary>My Seva</summary>
-                    <div class="nav-dropdown-menu">
-                        <a href="/my-calendar">My Calendar</a>
-                        <a href="/profile">My Profile</a>
-                        <a href="/notifications" aria-label="Notifications">Notifications {notification_link}</a>
-                    </div>
-                </details>
-                <a href="/impact">Community Impact</a>
-                <a href="/logout">Log out</a>
-            """
-            nav = nav.replace("{notification_link}", notification_link)
-
-    else:
-
-        nav = """
-            <a href="/login">Login</a>
-            <a href="/register">Register</a>
-        """
+    flash_html = "".join(
+        f'<div class="flash-message alert {h(category)}" role="status">{h(message)}</div>'
+        for category, message in get_flashed_messages(with_categories=True)
+    )
 
     seva_bot_widget = ""
     if user and user["role"] == "student":
@@ -2150,7 +877,7 @@ def layout(content, title="Smart Seva"):
             content="width=device-width, initial-scale=1"
         >
 
-        {STYLE}
+        <link rel="stylesheet" href="/static/style.css?v={_asset_version('style.css')}">
 
     </head>
 
@@ -2164,92 +891,7 @@ def layout(content, title="Smart Seva"):
             <span class="ik-constellation ik-three">ੴ</span>
         </div>
 
-        <script>
-        (function () {{
-            var canvas = document.getElementById("star-canvas");
-            if (!canvas || !canvas.getContext) return;
-            var ctx = canvas.getContext("2d");
-            var still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-            var colors = ["255,255,255", "255,231,161", "184,216,255", "255,214,170"];
-            var stars = [], shooting = null, nextShot = 0, w = 0, h = 0, dpr = 1, running = true;
-
-            function resize() {{
-                dpr = Math.min(window.devicePixelRatio || 1, 2);
-                w = window.innerWidth; h = window.innerHeight;
-                canvas.width = w * dpr; canvas.height = h * dpr;
-                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-                var count = Math.max(60, Math.min(240, Math.round(w * h / 7000)));
-                stars = [];
-                for (var i = 0; i < count; i++) {{
-                    stars.push({{
-                        x: Math.random() * w, y: Math.random() * h,
-                        r: Math.random() < 0.12 ? 1.6 + Math.random() * 1.1 : 0.5 + Math.random() * 0.9,
-                        c: colors[Math.floor(Math.random() * colors.length)],
-                        phase: Math.random() * Math.PI * 2,
-                        speed: 0.6 + Math.random() * 2.4,
-                        base: 0.25 + Math.random() * 0.35
-                    }});
-                }}
-            }}
-
-            function draw(t) {{
-                if (!running) return;
-                var time = t / 1000;
-                ctx.clearRect(0, 0, w, h);
-                for (var i = 0; i < stars.length; i++) {{
-                    var s = stars[i];
-                    var tw = still ? 0.5 : (Math.sin(time * s.speed + s.phase) + 1) / 2;
-                    var a = s.base + (1 - s.base) * tw * tw;
-                    ctx.globalAlpha = a;
-                    ctx.fillStyle = "rgb(" + s.c + ")";
-                    ctx.beginPath();
-                    ctx.arc(s.x, s.y, s.r * (0.8 + 0.5 * tw), 0, 6.2832);
-                    ctx.fill();
-                    if (s.r > 1.5 && tw > 0.6) {{
-                        // Bright stars get a four-point sparkle at the peak of the twinkle.
-                        var len = s.r * 5 * tw;
-                        ctx.globalAlpha = a * 0.7;
-                        ctx.strokeStyle = "rgb(" + s.c + ")";
-                        ctx.lineWidth = 0.7;
-                        ctx.beginPath();
-                        ctx.moveTo(s.x - len, s.y); ctx.lineTo(s.x + len, s.y);
-                        ctx.moveTo(s.x, s.y - len); ctx.lineTo(s.x, s.y + len);
-                        ctx.stroke();
-                    }}
-                }}
-                if (!still) {{
-                    if (!shooting && time > nextShot) {{
-                        shooting = {{ x: Math.random() * w * 0.8, y: Math.random() * h * 0.4,
-                                     vx: 7 + Math.random() * 4, vy: 3 + Math.random() * 2, life: 1 }};
-                        nextShot = time + 6 + Math.random() * 10;
-                    }}
-                    if (shooting) {{
-                        var g = ctx.createLinearGradient(shooting.x, shooting.y,
-                            shooting.x - shooting.vx * 9, shooting.y - shooting.vy * 9);
-                        g.addColorStop(0, "rgba(255,244,214," + shooting.life + ")");
-                        g.addColorStop(1, "rgba(255,231,161,0)");
-                        ctx.globalAlpha = 1;
-                        ctx.strokeStyle = g; ctx.lineWidth = 1.6;
-                        ctx.beginPath();
-                        ctx.moveTo(shooting.x, shooting.y);
-                        ctx.lineTo(shooting.x - shooting.vx * 9, shooting.y - shooting.vy * 9);
-                        ctx.stroke();
-                        shooting.x += shooting.vx; shooting.y += shooting.vy; shooting.life -= 0.014;
-                        if (shooting.life <= 0 || shooting.x > w + 40 || shooting.y > h + 40) shooting = null;
-                    }}
-                    requestAnimationFrame(draw);
-                }}
-            }}
-
-            document.addEventListener("visibilitychange", function () {{
-                running = !document.hidden;
-                if (running && !still) requestAnimationFrame(draw);
-            }});
-            window.addEventListener("resize", function () {{ resize(); if (still) draw(0); }});
-            resize();
-            requestAnimationFrame(draw);
-        }})();
-        </script>
+        <script src="/static/sky.js?v={_asset_version('sky.js')}" defer></script>
 
         <a class="skip-link" href="#main-content">Skip to main content</a>
         <nav aria-label="Main navigation">
@@ -2299,6 +941,7 @@ def layout(content, title="Smart Seva"):
         </script>
 
         <main id="main-content" tabindex="-1">
+        {flash_html}
         {content}
         </main>
 
@@ -3513,6 +2156,7 @@ def paath_signup(paath_id):
     finally:
         db.close()
 
+    flash("Your Paath request was submitted.", "success")
     return redirect(url_for("paath"))
 
 
@@ -3684,6 +2328,7 @@ def create_paath():
     db.commit()
     db.close()
 
+    flash("Paath slot created.", "success")
     return redirect(url_for("admin_paath"))
 
 
@@ -3720,6 +2365,7 @@ def update_paath_request(request_id, status):
         notify_user(signup["user_id"], "Paath request approved", "Your Paath sponsorship request has been approved.", "/paath")
     else:
         notify_user(signup["user_id"], "Paath request declined", "Your Paath sponsorship request was declined.", "/paath")
+    flash("Paath request updated.", "success")
     return redirect(url_for("admin_paath"))
 
 
@@ -3732,6 +2378,7 @@ def delete_paath(paath_id):
     db.execute("DELETE FROM paath_slots WHERE id = ?", (paath_id,))
     db.commit()
     db.close()
+    flash("Paath slot deleted.", "success")
     return redirect(url_for("admin_paath"))
 
 
@@ -3829,6 +2476,7 @@ def signup(seva_id):
 
     db.close()
 
+    flash("You're signed up. An admin will review your registration.", "success")
     return redirect(
         url_for("seva")
     )
@@ -3925,6 +2573,7 @@ def pantry():
         )
         db.commit()
         db.close()
+        flash("Pantry item added.", "success")
         return redirect(url_for("pantry"))
 
     items = db.execute(
@@ -4080,6 +2729,7 @@ def donate_pantry_item(item_id):
         )
         db.commit()
         db.close()
+        flash("Donation recorded. Thank you!", "success")
         return redirect(url_for("pantry"))
 
     token = h(csrf_token())
@@ -4281,6 +2931,7 @@ def pantry_signup(need_id):
         db.close()
         abort(400, "You have already signed up for this ingredient.")
     db.close()
+    flash("You're signed up to bring this ingredient.", "success")
     return redirect(url_for("pantry_needs"))
 
 
@@ -4413,6 +3064,7 @@ def create_pantry_need():
     log_activity(db, user, "created pantry need", "pantry_need", None, {"ingredient": ingredient, "quantity": format_quantity(quantity_needed), "unit": unit})
     db.commit()
     db.close()
+    flash("Pantry need created.", "success")
     return redirect(url_for("admin_pantry"))
 
 
@@ -4426,6 +3078,7 @@ def archive_pantry_need(need_id):
     log_activity(db, user, "archived pantry need", "pantry_need", need_id)
     db.commit()
     db.close()
+    flash("Pantry need archived.", "success")
     return redirect(url_for("admin_pantry"))
 
 
@@ -4457,6 +3110,7 @@ def update_pantry_fulfillment(signup_id, status):
     log_activity(db, user, "updated pantry fulfillment", "pantry_signup", signup_id, {"from": item["status"], "to": status, "need_id": item["need_id"]})
     db.commit()
     db.close()
+    flash("Pantry fulfillment updated.", "success")
     return redirect(url_for("admin_pantry"))
 
 
@@ -5551,6 +4205,7 @@ def checkin(signup_id):
     db.commit()
     db.close()
 
+    flash("Checked in. Remember to check out after the Seva ends.", "success")
     return redirect(
         url_for("dashboard")
     )
@@ -5656,6 +4311,7 @@ def checkout(signup_id):
     db.commit()
     db.close()
 
+    flash("Checked out. Your hours are waiting for admin approval.", "success")
     return redirect(
         url_for("dashboard")
     )
@@ -6399,6 +5055,7 @@ def create_event():
     )
     db.commit()
     db.close()
+    flash("Event created.", "success")
     return redirect(url_for("admin_events"))
 
 
@@ -6410,6 +5067,7 @@ def delete_event(event_id):
     db.execute("DELETE FROM public.special_events WHERE id = ?", (event_id,))
     db.commit()
     db.close()
+    flash("Event deleted.", "success")
     return redirect(url_for("admin_events"))
 
 
@@ -6501,15 +5159,24 @@ def admin_activity_log():
         page = 1
     page_size = 100
     offset = (page - 1) * page_size
+    query = clean(request.args.get("q"), 100)
+    where, params = "", []
+    if query:
+        like = "%" + query.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_") + "%"
+        where = "WHERE actor_name ILIKE ? OR actor_email ILIKE ? OR action ILIKE ? OR entity_type ILIKE ?"
+        params = [like] * 4
     db = get_db()
-    total = int(db.execute("SELECT COUNT(*) AS count FROM activity_log").fetchone()["count"] or 0)
-    entries = db.execute(
-        """
-        SELECT id, actor_name, actor_email, action, entity_type, entity_id, details, created_at
-        FROM activity_log ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
-        """, (page_size, offset)
-    ).fetchall()
-    db.close()
+    try:
+        total = int(db.execute(f"SELECT COUNT(*) AS count FROM activity_log {where}", params).fetchone()["count"] or 0)
+        entries = db.execute(
+            f"""
+            SELECT id, actor_name, actor_email, action, entity_type, entity_id, details, created_at
+            FROM activity_log {where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
+            """, params + [page_size, offset]
+        ).fetchall()
+    finally:
+        db.close()
+    q_param = "&q=" + urlencode({"q": query})[2:] if query else ""
     rows = ""
     for entry in entries:
         try:
@@ -6525,12 +5192,16 @@ def admin_activity_log():
         )
     if not rows:
         rows = "<tr><td colspan='5'>No activity has been recorded yet. New actions will appear here.</td></tr>"
-    prev = f'<a class="button dark-button" href="/admin/activity-log?page={page-1}">← Newer</a>' if page > 1 else ""
-    nxt = f'<a class="button dark-button" href="/admin/activity-log?page={page+1}">Older →</a>' if offset + page_size < total else ""
+    prev = f'<a class="button dark-button" href="/admin/activity-log?page={page-1}{q_param}">← Newer</a>' if page > 1 else ""
+    nxt = f'<a class="button dark-button" href="/admin/activity-log?page={page+1}{q_param}">Older →</a>' if offset + page_size < total else ""
     return layout(f"""
       <div class="container"><h1>Central Admin · Activity Log</h1>
       <p class="muted">Timestamped record of who performed important actions and what changed. Restricted to central admins.</p>
-      <div class="card"><p><strong>{total}</strong> recorded actions · Page {page}</p>
+      <div class="card"><form method="GET" class="filter-actions" role="search">
+        <input type="search" name="q" value="{h(query)}" placeholder="Search by person, email or action" maxlength="100" aria-label="Search activity log">
+        <button type="submit">Search</button>{'<a class="button dark-button" href="/admin/activity-log">Clear</a>' if query else ''}
+      </form>
+      <p><strong>{total}</strong> recorded actions · Page {page}</p>
       <div style="overflow-x:auto"><table><thead><tr><th>When (UTC)</th><th>Who</th><th>Action</th><th>Item</th><th>Details</th></tr></thead>
       <tbody>{rows}</tbody></table></div><div class="filter-actions">{prev}{nxt}</div></div></div>
       """, "Central Admin Activity Log")
@@ -6792,6 +5463,10 @@ def admin():
         <tr>
 
             <td>
+                <input type="checkbox" name="signup_ids" value="{item["id"]}" form="bulk-hours-form" class="bulk-check" aria-label="Select {h(item["student_name"])} for bulk action">
+            </td>
+
+            <td>
                 {h(item["student_name"])}
                 <br>
                 <span class="small">
@@ -6858,7 +5533,7 @@ def admin():
 
         pending_rows = """
         <tr>
-            <td colspan="5">
+            <td colspan="6">
                 No completed seva is waiting for approval.
             </td>
         </tr>
@@ -7212,6 +5887,10 @@ def admin():
                         <tr>
 
                             <th>
+                                <input type="checkbox" id="bulk-select-all" aria-label="Select all pending hours">
+                            </th>
+
+                            <th>
                                 Student
                             </th>
 
@@ -7236,6 +5915,17 @@ def admin():
                         {pending_rows}
 
                     </table>
+
+                    <form id="bulk-hours-form" method="POST" action="/admin/bulk-hours" class="action-panel" style="margin-top:12px">
+                        <input type="hidden" name="csrf_token" value="{token}">
+                        <button type="submit" name="action" value="approve">Approve selected</button>
+                        <button type="submit" name="action" value="reject" class="danger" onclick="return confirm('Reject all selected hours?');">Reject selected</button>
+                    </form>
+                    <script>
+                    document.getElementById("bulk-select-all").addEventListener("change", function (e) {{
+                        document.querySelectorAll(".bulk-check").forEach(function (box) {{ box.checked = e.target.checked; }});
+                    }});
+                    </script>
 
                 </div>
 
@@ -7416,6 +6106,7 @@ def create_seva():
     db.commit()
     db.close()
 
+    flash("Seva opportunity created.", "success")
     return redirect(
         url_for("admin")
     )
@@ -7443,6 +6134,7 @@ def delete_seva(seva_id):
     db.commit()
     db.close()
 
+    flash("Seva opportunity deleted.", "success")
     return redirect(
         url_for("admin")
     )
@@ -7498,9 +6190,78 @@ def approve_signup(signup_id):
     notify_user(signup["user_id"], "Seva hours approved", "Your completed Seva hours have been approved.", "/dashboard")
     db.close()
 
+    flash("Hours approved.", "success")
     return redirect(
         url_for("admin")
     )
+
+
+@app.route("/admin/bulk-hours", methods=["POST"])
+@seva_admin_required
+def bulk_review_hours():
+    """Approve or reject several pending hour submissions in one step."""
+    validate_csrf()
+
+    action = request.form.get("action", "")
+    if action not in ("approve", "reject"):
+        abort(400, "Choose approve or reject.")
+
+    signup_ids = []
+    for raw in request.form.getlist("signup_ids")[:100]:
+        try:
+            signup_ids.append(int(raw))
+        except ValueError:
+            continue
+    if not signup_ids:
+        flash("Select at least one submission first.", "error")
+        return redirect(url_for("admin"))
+
+    user = current_user()
+    db = get_db()
+    done = skipped = 0
+    notices = []
+    try:
+        for signup_id in signup_ids:
+            signup = db.execute(
+                "SELECT id, user_id, status, check_out, hours FROM signups WHERE id = ?",
+                (signup_id,)
+            ).fetchone()
+            if not signup or signup["status"] != "pending":
+                skipped += 1
+                continue
+            if action == "approve":
+                try:
+                    hours = finite_number(signup["hours"], minimum=0.01, maximum=MAX_HOURS_PER_SEVA, field="Recorded hours")
+                except ValueError:
+                    hours = None
+                if not signup["check_out"] or hours is None:
+                    skipped += 1
+                    continue
+                db.execute("UPDATE signups SET status = 'approved' WHERE id = ? AND status = 'pending'", (signup_id,))
+                log_activity(db, user, "approved Seva hours", "signup", signup_id,
+                             {"user_id": str(signup["user_id"]), "hours": hours, "bulk": True})
+                notices.append((signup["user_id"], "Seva hours approved",
+                                "Your completed Seva hours have been approved."))
+            else:
+                db.execute("UPDATE signups SET status = 'rejected' WHERE id = ? AND status = 'pending'", (signup_id,))
+                log_activity(db, user, "rejected Seva hours", "signup", signup_id,
+                             {"user_id": str(signup["user_id"]), "bulk": True})
+                notices.append((signup["user_id"], "Seva hours rejected",
+                                "Your completed Seva hours were not approved. Please contact the administrator if you need clarification."))
+            done += 1
+        db.commit()
+    finally:
+        db.close()
+
+    for notice_user, title, message in notices:
+        notify_user(notice_user, title, message, "/dashboard")
+
+    verb = "approved" if action == "approve" else "rejected"
+    message = f"{done} submission(s) {verb}."
+    if skipped:
+        message += f" {skipped} skipped (not pending, not checked out, or invalid hours)."
+    flash(message, "success" if done else "error")
+    return redirect(url_for("admin"))
 
 
 # ============================================================
@@ -7544,6 +6305,7 @@ def reject_signup(signup_id):
     notify_user(signup["user_id"], "Seva hours rejected", "Your completed Seva hours were not approved. Please contact the administrator if you need clarification.", "/dashboard")
     db.close()
 
+    flash("Hours rejected.", "success")
     return redirect(
         url_for("admin")
     )
