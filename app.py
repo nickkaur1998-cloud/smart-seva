@@ -2129,13 +2129,13 @@ def paath_signup(paath_id):
 
     booked = db.execute(
         """
-        SELECT COUNT(*)
+        SELECT COUNT(*) AS booked
         FROM paath_signups
         WHERE paath_id = ?
         AND status IN ('pending', 'approved')
         """,
         (paath_id,)
-    ).fetchone()[0]
+    ).fetchone()["booked"]
 
     if booked >= slot["capacity"]:
         db.close()
