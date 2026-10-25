@@ -2,6 +2,7 @@ import os
 import secrets
 import json
 import math
+from decimal import Decimal, ROUND_CEILING
 import re
 import qrcode
 from urllib.request import Request, urlopen
@@ -77,11 +78,32 @@ SUPABASE_KEY = os.environ.get(
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
 STRIPE_CURRENCY = os.environ.get("STRIPE_CURRENCY", "usd").strip().lower() or "usd"
+# Stripe's standard US card fee. The admin enters the amount the gurdwara should
+# receive and the student is charged enough to cover the fee (set
+# STRIPE_PASS_FEES=0 to charge the listed price exactly).
+STRIPE_FEE_PERCENT = Decimal(os.environ.get("STRIPE_FEE_PERCENT", "2.9")) / 100
+STRIPE_FEE_FIXED = Decimal(os.environ.get("STRIPE_FEE_FIXED", "0.30"))
+STRIPE_PASS_FEES = os.environ.get("STRIPE_PASS_FEES", "1").strip() == "1"
 PAYMENT_HOLD_MINUTES = 35  # unpaid Paath requests release their slot after this long
 
 
 def stripe_enabled():
     return bool(stripe and STRIPE_SECRET_KEY)
+
+
+def paath_charge_breakdown(price):
+    """Return (net, fee, total) as Decimals for a slot's listed price.
+
+    net is what the gurdwara should receive; total is what the student pays so
+    that, after Stripe takes its percentage and fixed fee, net is left over.
+    """
+    net = Decimal(str(price or 0)).quantize(Decimal("0.01"))
+    if not stripe_enabled() or not STRIPE_PASS_FEES or net <= 0:
+        return net, Decimal("0.00"), net
+    total = ((net + STRIPE_FEE_FIXED) / (1 - STRIPE_FEE_PERCENT)).quantize(
+        Decimal("0.01"), rounding=ROUND_CEILING
+    )
+    return net, total - net, total
 
 
 # The Flask server talks directly to Supabase Postgres.
@@ -2088,6 +2110,7 @@ def paath():
         available = capacity - booked
 
         own_payment = slot["own_payment"]
+        price_net, price_fee, price_total = paath_charge_breakdown(slot["price"])
         pay_label = "Pay &amp; Sponsor This Paath" if stripe_enabled() and float(slot["price"] or 0) > 0 else "Sponsor This Paath"
         try:
             unpaid_expired = own_payment == "unpaid" and (
@@ -2136,7 +2159,8 @@ def paath():
             <p class="muted">{h(slot["description"])}</p>
             <p>📅 {h(slot["date"])}</p>
             <p>⏰ {h(slot["start_time"])} – {h(slot["end_time"])}</p>
-            <p><strong>Sponsorship: ${float(slot["price"]):,.2f}</strong></p>
+            <p><strong>Sponsorship: ${price_net:,.2f}</strong></p>
+            {f'<p class="small muted">+ ${price_fee:,.2f} card processing fee = <strong>${price_total:,.2f}</strong> total</p>' if price_fee else ""}
             <p class="small">{available} of {capacity} slot(s) available</p>
             {action}
         </div>
@@ -2168,23 +2192,33 @@ def paath():
 
 def start_paath_checkout(signup_id, user, slot):
     """Create a Stripe Checkout Session for a Paath request and return it."""
-    cents = int(round(float(slot["price"]) * 100))
+    net, fee, _total = paath_charge_breakdown(slot["price"])
     expires_at = int(datetime.now(timezone.utc).timestamp()) + 31 * 60
     metadata = {"paath_signup_id": str(signup_id), "user_id": str(user["id"])}
-    return stripe.checkout.Session.create(
-        api_key=STRIPE_SECRET_KEY,
-        mode="payment",
-        line_items=[{
+    line_items = [{
+        "quantity": 1,
+        "price_data": {
+            "currency": STRIPE_CURRENCY,
+            "unit_amount": int(net * 100),
+            "product_data": {
+                "name": clean(f"Paath sponsorship: {slot['title']}", 120),
+                "description": clean(f"{slot['date']} {slot['start_time']}", 120),
+            },
+        },
+    }]
+    if fee > 0:
+        line_items.append({
             "quantity": 1,
             "price_data": {
                 "currency": STRIPE_CURRENCY,
-                "unit_amount": cents,
-                "product_data": {
-                    "name": clean(f"Paath sponsorship: {slot['title']}", 120),
-                    "description": clean(f"{slot['date']} {slot['start_time']}", 120),
-                },
+                "unit_amount": int(fee * 100),
+                "product_data": {"name": "Card processing fee"},
             },
-        }],
+        })
+    return stripe.checkout.Session.create(
+        api_key=STRIPE_SECRET_KEY,
+        mode="payment",
+        line_items=line_items,
         customer_email=user["email"],
         client_reference_id=str(signup_id),
         metadata=metadata,
@@ -2206,6 +2240,11 @@ def paath_signup(paath_id):
     if user["role"] != "student":
         abort(403)
 
+    # Limit checkout attempts per student (guards against card-testing abuse).
+    if rate_limited("paath-checkout", str(user["id"]), 10, 3600):
+        flash("Too many payment attempts. Please wait a while and try again.", "error")
+        return redirect(url_for("paath"))
+
     db = get_db()
     checkout_slot = None
     signup_id = None
@@ -2219,7 +2258,8 @@ def paath_signup(paath_id):
         if not slot:
             abort(404)
 
-        cents = int(round(float(slot["price"] or 0) * 100))
+        _net, _fee, charge_total = paath_charge_breakdown(slot["price"])
+        cents = int(charge_total * 100)
         if stripe_enabled() and 0 < cents < 50:
             db.rollback()
             flash("This sponsorship amount is below the minimum card payment ($0.50). Please contact an admin.", "error")
@@ -2274,7 +2314,7 @@ def paath_signup(paath_id):
                     VALUES (?, ?, ?, 'pending', ?, ?)
                     RETURNING id
                     """,
-                    (paath_id, user["id"], slot["price"], "unpaid" if paying else None, utc_now())
+                    (paath_id, user["id"], charge_total if paying else slot["price"], "unpaid" if paying else None, utc_now())
                 ).fetchone()["id"]
             except IntegrityError:
                 db.rollback()
@@ -2445,7 +2485,7 @@ def admin_paath():
         <tr>
             <td>{h(slot["title"])}</td>
             <td>{h(slot["date"])}<br>{h(slot["start_time"])} – {h(slot["end_time"])}</td>
-            <td>${float(slot["price"]):,.2f}</td>
+            <td>${float(slot["price"]):,.2f}{f'<br><span class="small muted">Student pays ${paath_charge_breakdown(slot["price"])[2]:,.2f}</span>' if paath_charge_breakdown(slot["price"])[1] else ""}</td>
             <td>{slot["booked_count"]} / {slot["capacity"]}</td>
             <td>
                 <form method="POST" action="/admin/paath/delete/{slot["id"]}">
@@ -2515,11 +2555,25 @@ def admin_paath():
                         <div><label>End Time</label><input type="time" name="end_time" required></div>
                     </div>
                     <div class="grid">
-                        <div><label>Sponsorship Price ($)</label><input type="number" name="price" min="0" max="{MAX_PAATH_PRICE}" step="0.01" required></div>
+                        <div><label>Amount the gurdwara receives ($)</label><input type="number" id="paath-price" name="price" min="0" max="{MAX_PAATH_PRICE}" step="0.01" required>{'<p class="small muted" id="paath-fee-preview" aria-live="polite">Enter an amount to see what the student will be charged (Stripe card fee is added automatically).</p>' if stripe_enabled() and STRIPE_PASS_FEES else ""}</div>
                         <div><label>Available Slots</label><input type="number" name="capacity" min="1" max="1000" value="1" required></div>
                     </div>
                     <button>Publish Paath Slot</button>
                 </form>
+                <script>
+                (function () {{
+                    var input = document.getElementById("paath-price");
+                    var note = document.getElementById("paath-fee-preview");
+                    if (!input || !note) return;
+                    var pct = {float(STRIPE_FEE_PERCENT)}, fixed = {float(STRIPE_FEE_FIXED)};
+                    input.addEventListener("input", function () {{
+                        var net = parseFloat(input.value);
+                        if (!(net > 0)) {{ note.textContent = "Enter an amount to see what the student will be charged."; return; }}
+                        var total = Math.ceil(((net + fixed) / (1 - pct)) * 100) / 100;
+                        note.textContent = "Student pays $" + total.toFixed(2) + " ($" + (total - net).toFixed(2) + " card fee). The gurdwara receives $" + net.toFixed(2) + ".";
+                    }});
+                }})();
+                </script>
             </div>
 
             <div class="card">
