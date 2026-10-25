@@ -3,3 +3,4 @@ reportlab
 psycopg[binary]
 gunicorn
 qrcode
+stripe>=8

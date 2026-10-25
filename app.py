@@ -28,6 +28,11 @@ from flask import (
     get_flashed_messages,
 )
 
+try:
+    import stripe
+except ImportError:  # Payments stay switched off until the package is installed.
+    stripe = None
+
 from psycopg import connect, IntegrityError
 from psycopg.rows import dict_row
 
@@ -66,6 +71,18 @@ SUPABASE_KEY = os.environ.get(
     "SUPABASE_ANON_KEY",
     os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")
 ).strip()
+
+# Stripe is optional: with no STRIPE_SECRET_KEY, Paath requests work as before
+# (no payment). Keep these only in the server's environment.
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip()
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip()
+STRIPE_CURRENCY = os.environ.get("STRIPE_CURRENCY", "usd").strip().lower() or "usd"
+PAYMENT_HOLD_MINUTES = 35  # unpaid Paath requests release their slot after this long
+
+
+def stripe_enabled():
+    return bool(stripe and STRIPE_SECRET_KEY)
+
 
 # The Flask server talks directly to Supabase Postgres.
 # Keep this value ONLY in the server's .env / deployment environment.
@@ -248,6 +265,13 @@ def init_db():
             )
         """)
         db.execute("CREATE INDEX IF NOT EXISTS activity_log_created_idx ON activity_log(created_at DESC, id DESC)")
+        # Stripe payment tracking for Paath sponsorships (NULL = no payment required).
+        db.execute("ALTER TABLE paath_signups ADD COLUMN IF NOT EXISTS payment_status TEXT")
+        db.execute("ALTER TABLE paath_signups ADD COLUMN IF NOT EXISTS stripe_session_id TEXT")
+        db.execute("ALTER TABLE paath_signups ADD COLUMN IF NOT EXISTS stripe_payment_intent TEXT")
+        db.execute("ALTER TABLE paath_signups ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ")
+        db.execute("ALTER TABLE paath_signups ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS paath_signups_stripe_session_idx ON paath_signups(stripe_session_id) WHERE stripe_session_id IS NOT NULL")
         db.execute("ALTER TABLE pantry_need_signups ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'committed'")
         db.execute("ALTER TABLE pantry_need_signups ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ")
         db.commit()
@@ -338,7 +362,7 @@ def add_security_headers(response):
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
         "connect-src 'self' https://translate.googleapis.com; "
-        "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+        "object-src 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com; frame-ancestors 'none'",
     )
     if app.config["SESSION_COOKIE_SECURE"]:
         response.headers.setdefault(
@@ -1997,6 +2021,21 @@ def seva_api():
 # PAATH SLOTS
 # ============================================================
 
+# A Paath request holds a slot when it is pending/approved and either needs no
+# payment, is paid, or is unpaid but still inside the Stripe checkout window.
+PAATH_ACTIVE_SQL = f"""(
+    paath_signups.status IN ('pending', 'approved')
+    AND (
+        paath_signups.payment_status IS NULL
+        OR paath_signups.payment_status = 'paid'
+        OR (
+            paath_signups.payment_status = 'unpaid'
+            AND CAST(paath_signups.created_at AS timestamptz) > NOW() - INTERVAL '{PAYMENT_HOLD_MINUTES} minutes'
+        )
+    )
+)"""
+
+
 @app.route("/paath")
 @login_required
 def paath():
@@ -2009,23 +2048,29 @@ def paath():
     db = get_db()
 
     slots = db.execute(
-        """
+        f"""
         SELECT
             paath_slots.*,
             COUNT(
                 CASE
-                    WHEN paath_signups.status IN ('pending', 'approved')
+                    WHEN {PAATH_ACTIVE_SQL}
                     THEN 1
                 END
             ) AS booked_count,
-            own_signup.status AS own_status
+            own_signup.status AS own_status,
+            own_signup.payment_status AS own_payment,
+            own_signup.created_at AS own_created
         FROM paath_slots
         LEFT JOIN paath_signups
             ON paath_signups.paath_id = paath_slots.id
-        LEFT JOIN paath_signups AS own_signup
-            ON own_signup.paath_id = paath_slots.id
-            AND own_signup.user_id = ?
-        GROUP BY paath_slots.id, own_signup.status
+        LEFT JOIN LATERAL (
+            SELECT status, payment_status, created_at
+            FROM paath_signups AS mine
+            WHERE mine.paath_id = paath_slots.id AND mine.user_id = ?
+            ORDER BY mine.id DESC
+            LIMIT 1
+        ) AS own_signup ON TRUE
+        GROUP BY paath_slots.id, own_signup.status, own_signup.payment_status, own_signup.created_at
         ORDER BY paath_slots.date ASC, paath_slots.start_time ASC
         """,
         (user["id"],)
@@ -2042,15 +2087,37 @@ def paath():
         own_status = slot["own_status"]
         available = capacity - booked
 
+        own_payment = slot["own_payment"]
+        pay_label = "Pay &amp; Sponsor This Paath" if stripe_enabled() and float(slot["price"] or 0) > 0 else "Sponsor This Paath"
+        try:
+            unpaid_expired = own_payment == "unpaid" and (
+                datetime.now(timezone.utc) - as_datetime(slot["own_created"]).astimezone(timezone.utc)
+                > timedelta(minutes=PAYMENT_HOLD_MINUTES)
+            )
+        except (TypeError, ValueError):
+            unpaid_expired = False
+
+        if own_payment in ("expired", "refunded") or unpaid_expired:
+            own_status = None
+            own_payment = None
+
         if own_status == "approved":
             action = '<span class="success">✓ Sponsorship approved</span>'
+        elif own_status == "pending" and own_payment == "unpaid":
+            action = f'''
+                <span class="warning">Payment not completed</span>
+                <form method="POST" action="/paath/signup/{slot["id"]}">
+                    <input type="hidden" name="csrf_token" value="{token}">
+                    <button>Complete Payment</button>
+                </form>
+            '''
         elif own_status == "pending":
-            action = '<span class="warning">Request pending approval</span>'
+            action = '<span class="warning">Paid · pending approval</span>' if own_payment == "paid" else '<span class="warning">Request pending approval</span>'
         elif own_status == "rejected":
             action = f'''
                 <form method="POST" action="/paath/signup/{slot["id"]}">
                     <input type="hidden" name="csrf_token" value="{token}">
-                    <button>Request Again</button>
+                    <button>{pay_label}</button>
                 </form>
             '''
         elif available <= 0:
@@ -2059,7 +2126,7 @@ def paath():
             action = f'''
                 <form method="POST" action="/paath/signup/{slot["id"]}">
                     <input type="hidden" name="csrf_token" value="{token}">
-                    <button>Sponsor This Paath</button>
+                    <button>{pay_label}</button>
                 </form>
             '''
 
@@ -2090,11 +2157,42 @@ def paath():
             <p class="muted">
                 Choose a date and time to sponsor a paath. Your request will be
                 reviewed by the administrator.
+                {"Payment is handled securely by Stripe; a declined request is refunded in full." if stripe_enabled() else ""}
             </p>
             <div class="grid">{cards}</div>
         </div>
         """,
         "Paath"
+    )
+
+
+def start_paath_checkout(signup_id, user, slot):
+    """Create a Stripe Checkout Session for a Paath request and return it."""
+    cents = int(round(float(slot["price"]) * 100))
+    expires_at = int(datetime.now(timezone.utc).timestamp()) + 31 * 60
+    metadata = {"paath_signup_id": str(signup_id), "user_id": str(user["id"])}
+    return stripe.checkout.Session.create(
+        api_key=STRIPE_SECRET_KEY,
+        mode="payment",
+        line_items=[{
+            "quantity": 1,
+            "price_data": {
+                "currency": STRIPE_CURRENCY,
+                "unit_amount": cents,
+                "product_data": {
+                    "name": clean(f"Paath sponsorship: {slot['title']}", 120),
+                    "description": clean(f"{slot['date']} {slot['start_time']}", 120),
+                },
+            },
+        }],
+        customer_email=user["email"],
+        client_reference_id=str(signup_id),
+        metadata=metadata,
+        payment_intent_data={"metadata": metadata},
+        success_url=url_for("paath_payment_return", result="success", _external=True),
+        cancel_url=url_for("paath_payment_return", result="cancelled", _external=True),
+        expires_at=expires_at,
+        idempotency_key=f"paath-checkout-{signup_id}-{secrets.token_hex(4)}",
     )
 
 
@@ -2109,55 +2207,195 @@ def paath_signup(paath_id):
         abort(403)
 
     db = get_db()
-    # Serialize bookings by locking the slot row before checking capacity.
-    slot = db.execute(
-        "SELECT * FROM paath_slots WHERE id = ? FOR UPDATE",
-        (paath_id,)
-    ).fetchone()
-
-    if not slot:
-        db.close()
-        abort(404)
-
-    existing = db.execute(
-        "SELECT id FROM paath_signups WHERE paath_id = ? AND user_id = ? AND status IN ('pending', 'approved')",
-        (paath_id, user["id"])
-    ).fetchone()
-    if existing:
-        db.close()
-        return redirect(url_for("paath"))
-
-    booked = db.execute(
-        """
-        SELECT COUNT(*) AS booked
-        FROM paath_signups
-        WHERE paath_id = ?
-        AND status IN ('pending', 'approved')
-        """,
-        (paath_id,)
-    ).fetchone()["booked"]
-
-    if booked >= slot["capacity"]:
-        db.close()
-        abort(400, "This paath slot is already full.")
-
+    checkout_slot = None
+    signup_id = None
     try:
+        # Serialize bookings by locking the slot row before checking capacity.
+        slot = db.execute(
+            "SELECT * FROM paath_slots WHERE id = ? FOR UPDATE",
+            (paath_id,)
+        ).fetchone()
+
+        if not slot:
+            abort(404)
+
+        cents = int(round(float(slot["price"] or 0) * 100))
+        if stripe_enabled() and 0 < cents < 50:
+            db.rollback()
+            flash("This sponsorship amount is below the minimum card payment ($0.50). Please contact an admin.", "error")
+            return redirect(url_for("paath"))
+        paying = stripe_enabled() and cents >= 50
+
+        # Release unpaid requests whose checkout window has passed.
         db.execute(
-            """
-            INSERT INTO paath_signups
-            (paath_id, user_id, amount, status, created_at)
-            VALUES (?, ?, ?, 'pending', ?)
+            f"""
+            UPDATE paath_signups SET payment_status = 'expired'
+            WHERE paath_id = ? AND payment_status = 'unpaid'
+            AND CAST(created_at AS timestamptz) <= NOW() - INTERVAL '{PAYMENT_HOLD_MINUTES} minutes'
             """,
-            (paath_id, user["id"], slot["price"], utc_now())
+            (paath_id,)
         )
+
+        existing = db.execute(
+            """
+            SELECT id, payment_status FROM paath_signups
+            WHERE paath_id = ? AND user_id = ? AND status IN ('pending', 'approved')
+            AND payment_status IS DISTINCT FROM 'expired'
+            ORDER BY id DESC LIMIT 1
+            """,
+            (paath_id, user["id"])
+        ).fetchone()
+
+        if existing:
+            if paying and existing["payment_status"] == "unpaid":
+                signup_id = existing["id"]  # resume the unfinished payment
+            else:
+                db.commit()
+                flash("You have already requested this Paath.", "error")
+                return redirect(url_for("paath"))
+        else:
+            booked = db.execute(
+                f"""
+                SELECT COUNT(*) AS booked
+                FROM paath_signups
+                WHERE paath_id = ? AND {PAATH_ACTIVE_SQL}
+                """,
+                (paath_id,)
+            ).fetchone()["booked"]
+
+            if booked >= slot["capacity"]:
+                abort(400, "This paath slot is already full.")
+
+            try:
+                signup_id = db.execute(
+                    """
+                    INSERT INTO paath_signups
+                    (paath_id, user_id, amount, status, payment_status, created_at)
+                    VALUES (?, ?, ?, 'pending', ?, ?)
+                    RETURNING id
+                    """,
+                    (paath_id, user["id"], slot["price"], "unpaid" if paying else None, utc_now())
+                ).fetchone()["id"]
+            except IntegrityError:
+                db.rollback()
+                flash("You have already requested this Paath.", "error")
+                return redirect(url_for("paath"))
+
         db.commit()
-    except IntegrityError:
-        pass
+        checkout_slot = slot if paying else None
     finally:
         db.close()
 
-    flash("Your Paath request was submitted.", "success")
+    if checkout_slot is None:
+        flash("Your Paath request was submitted.", "success")
+        return redirect(url_for("paath"))
+
+    try:
+        session_obj = start_paath_checkout(signup_id, user, checkout_slot)
+        db = get_db()
+        try:
+            db.execute("UPDATE paath_signups SET stripe_session_id = ? WHERE id = ?", (session_obj["id"], signup_id))
+            db.commit()
+        finally:
+            db.close()
+        return redirect(session_obj["url"], code=303)
+    except Exception as error:
+        app.logger.error("Stripe checkout could not be started: %s", type(error).__name__)
+        db = get_db()
+        try:
+            db.execute("UPDATE paath_signups SET payment_status = 'expired' WHERE id = ? AND payment_status = 'unpaid'", (signup_id,))
+            db.commit()
+        finally:
+            db.close()
+        flash("We couldn't start the payment. Please try again in a moment.", "error")
+        return redirect(url_for("paath"))
+
+
+@app.route("/paath/payment/<result>")
+@login_required
+def paath_payment_return(result):
+    """Landing page after Stripe Checkout; the webhook is what confirms payment."""
+    if result == "success":
+        flash("Thank you! Your payment is being confirmed. Your request will appear as paid shortly.", "success")
+    else:
+        flash("Payment cancelled. Your slot is held for a short time if you want to finish paying.", "error")
     return redirect(url_for("paath"))
+
+
+def refund_paath_payment(payment_intent, signup_id):
+    """Refund a Paath payment in full; raises if Stripe refuses."""
+    return stripe.Refund.create(
+        api_key=STRIPE_SECRET_KEY,
+        payment_intent=payment_intent,
+        metadata={"paath_signup_id": str(signup_id)},
+        idempotency_key=f"paath-refund-{signup_id}",
+    )
+
+
+@app.route("/stripe/webhook", methods=["POST"])
+def stripe_webhook():
+    """Stripe calls this when a payment completes or a checkout expires."""
+    if not stripe_enabled() or not STRIPE_WEBHOOK_SECRET:
+        return "", 503
+    raw_body = request.get_data()
+    try:
+        # Verifies the signature and timestamp; the body is then read as plain JSON.
+        stripe.Webhook.construct_event(
+            raw_body, request.headers.get("Stripe-Signature", ""), STRIPE_WEBHOOK_SECRET
+        )
+        event = json.loads(raw_body)
+    except Exception:
+        return "", 400
+
+    event_type = event["type"]
+    obj = event["data"]["object"]
+    signup_id_text = (obj.get("metadata") or {}).get("paath_signup_id", "")
+    if not signup_id_text.isdigit():
+        return "", 200  # not one of ours
+    signup_id = int(signup_id_text)
+
+    db = get_db()
+    notice = None
+    try:
+        if event_type in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
+            if obj.get("payment_status") != "paid":
+                return "", 200  # delayed payment method; wait for async_payment_succeeded
+            row = db.execute(
+                """
+                UPDATE paath_signups
+                SET payment_status = 'paid', paid_at = NOW(),
+                    stripe_payment_intent = ?, stripe_session_id = COALESCE(stripe_session_id, ?)
+                WHERE id = ? AND payment_status IN ('unpaid', 'expired')
+                RETURNING user_id, status
+                """,
+                (obj.get("payment_intent"), obj.get("id"), signup_id)
+            ).fetchone()
+            if row:
+                log_activity(db, None, "received Paath payment", "paath_signup", signup_id,
+                             {"amount_total": obj.get("amount_total"), "currency": obj.get("currency")})
+                if row["status"] == "rejected" and obj.get("payment_intent"):
+                    # Paid after the request was already declined: give it back.
+                    refund_paath_payment(obj["payment_intent"], signup_id)
+                    db.execute("UPDATE paath_signups SET payment_status = 'refunded', refunded_at = NOW() WHERE id = ?", (signup_id,))
+                else:
+                    notice = (row["user_id"], "Paath payment received",
+                              "Your sponsorship payment was received. An admin will review your request.")
+        elif event_type == "checkout.session.expired":
+            db.execute(
+                "UPDATE paath_signups SET payment_status = 'expired' WHERE id = ? AND payment_status = 'unpaid'",
+                (signup_id,)
+            )
+        db.commit()
+    except Exception as error:
+        db.rollback()
+        app.logger.error("Stripe webhook handling failed: %s", type(error).__name__)
+        return "", 500  # Stripe will retry
+    finally:
+        db.close()
+
+    if notice:
+        notify_user(notice[0], notice[1], notice[2], "/paath")
+    return "", 200
 
 
 @app.route("/admin/paath")
@@ -2166,12 +2404,12 @@ def admin_paath():
 
     db = get_db()
     slots = db.execute(
-        """
+        f"""
         SELECT
             paath_slots.*,
             COUNT(
                 CASE
-                    WHEN paath_signups.status IN ('pending', 'approved')
+                    WHEN {PAATH_ACTIVE_SQL}
                     THEN 1
                 END
             ) AS booked_count
@@ -2221,7 +2459,21 @@ def admin_paath():
     request_rows = ""
     for item in requests:
         actions = f'<span class="{ "success" if item["status"] == "approved" else "warning" if item["status"] == "pending" else "muted" }">{h(item["status"].title())}</span>'
-        if item["status"] == "pending":
+        payment_labels = {
+            "paid": '<span class="success">Paid</span>',
+            "unpaid": '<span class="warning">Awaiting payment</span>',
+            "expired": '<span class="muted">Payment expired</span>',
+            "refunded": '<span class="muted">Refunded</span>',
+        }
+        payment_html = payment_labels.get(item["payment_status"], '<span class="muted">—</span>')
+        if item["status"] == "pending" and item["payment_status"] in ("unpaid", "expired"):
+            actions = f"""
+            <form method="POST" action="/admin/paath/request/{item["id"]}/rejected" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{token}">
+                <button class="danger">Cancel request</button>
+            </form>
+            """
+        elif item["status"] == "pending":
             actions = f"""
             <form method="POST" action="/admin/paath/request/{item["id"]}/approved" style="display:inline">
                 <input type="hidden" name="csrf_token" value="{token}">
@@ -2238,6 +2490,7 @@ def admin_paath():
             <td>{h(item["student_name"])}<br><span class="small">{h(item["student_email"])}</span></td>
             <td>{h(item["title"])}<br>{h(item["date"])} {h(item["start_time"])}</td>
             <td>${float(item["amount"]):,.2f}</td>
+            <td>{payment_html}</td>
             <td>{actions}</td>
         </tr>
         """
@@ -2280,8 +2533,8 @@ def admin_paath():
             <div class="card">
                 <h2>Sponsorship Requests</h2>
                 <div style="overflow-x:auto"><table>
-                    <tr><th>Student</th><th>Paath</th><th>Amount</th><th>Status</th></tr>
-                    {request_rows or '<tr><td colspan="4">No sponsorship requests yet.</td></tr>'}
+                    <tr><th>Student</th><th>Paath</th><th>Amount</th><th>Payment</th><th>Status</th></tr>
+                    {request_rows or '<tr><td colspan="5">No sponsorship requests yet.</td></tr>'}
                 </table></div>
             </div>
         </div>
@@ -2343,7 +2596,7 @@ def update_paath_request(request_id, status):
     user = current_user()
     db = get_db()
     signup = db.execute(
-        "SELECT id, user_id, status FROM paath_signups WHERE id = ?",
+        "SELECT id, user_id, status, payment_status, stripe_payment_intent FROM paath_signups WHERE id = ?",
         (request_id,)
     ).fetchone()
     if not signup:
@@ -2352,19 +2605,43 @@ def update_paath_request(request_id, status):
     if signup["status"] != "pending":
         db.close()
         abort(400, "Only pending Paath requests can be reviewed.")
+    if status == "approved" and signup["payment_status"] in ("unpaid", "expired"):
+        db.close()
+        flash("This request can't be approved until the student's payment is complete.", "error")
+        return redirect(url_for("admin_paath"))
 
-    db.execute(
-        "UPDATE paath_signups SET status = ? WHERE id = ? AND status = 'pending'",
-        (status, request_id)
-    )
+    refunded = False
+    if status == "rejected" and signup["payment_status"] == "paid":
+        # Money first: if the refund fails the request stays pending so it can be retried.
+        try:
+            refund_paath_payment(signup["stripe_payment_intent"], request_id)
+            refunded = True
+        except Exception as error:
+            db.close()
+            app.logger.error("Paath refund failed for signup %s: %s", request_id, type(error).__name__)
+            flash("The refund could not be processed, so the request was not rejected. Try again or refund it in the Stripe dashboard.", "error")
+            return redirect(url_for("admin_paath"))
+
+    if refunded:
+        db.execute(
+            "UPDATE paath_signups SET status = ?, payment_status = 'refunded', refunded_at = NOW() WHERE id = ? AND status = 'pending'",
+            (status, request_id)
+        )
+    else:
+        db.execute(
+            "UPDATE paath_signups SET status = ? WHERE id = ? AND status = 'pending'",
+            (status, request_id)
+        )
     log_activity(db, user, "reviewed Paath request", "paath_signup", request_id,
-                 {"student_id": str(signup["user_id"]), "status": status})
+                 {"student_id": str(signup["user_id"]), "status": status, "refunded": refunded})
     db.commit()
     db.close()
     if status == "approved":
         notify_user(signup["user_id"], "Paath request approved", "Your Paath sponsorship request has been approved.", "/paath")
     else:
-        notify_user(signup["user_id"], "Paath request declined", "Your Paath sponsorship request was declined.", "/paath")
+        notify_user(signup["user_id"], "Paath request declined",
+                    "Your Paath sponsorship request was declined." + (" Your payment has been refunded in full." if refunded else ""),
+                    "/paath")
     flash("Paath request updated.", "success")
     return redirect(url_for("admin_paath"))
 
@@ -2375,6 +2652,14 @@ def delete_paath(paath_id):
 
     validate_csrf()
     db = get_db()
+    paid = db.execute(
+        "SELECT COUNT(*) AS n FROM paath_signups WHERE paath_id = ? AND payment_status = 'paid'",
+        (paath_id,)
+    ).fetchone()["n"]
+    if paid:
+        db.close()
+        flash("This slot has paid sponsorships. Reject them (which refunds the payment) before deleting the slot.", "error")
+        return redirect(url_for("admin_paath"))
     db.execute("DELETE FROM paath_slots WHERE id = ?", (paath_id,))
     db.commit()
     db.close()
