@@ -931,6 +931,8 @@ def layout(content, title="Smart Seva"):
 
         <div class="night-sky" aria-hidden="true">
             <canvas id="star-canvas"></canvas>
+            <div class="ocean-waves back"></div>
+            <div class="ocean-waves"></div>
             <span class="ik-halo">ੴ</span>
             <span class="ik-constellation ik-one">ੴ</span>
             <span class="ik-constellation ik-two">ੴ</span>

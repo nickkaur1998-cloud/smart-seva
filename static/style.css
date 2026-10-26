@@ -1321,3 +1321,94 @@ main table td, main table th { vertical-align: middle; }
 
 /* Keyboard users: a visible, consistent focus ring everywhere. */
 :focus-visible { outline: 3px solid #ffe7a1; outline-offset: 3px; border-radius: 6px; }
+
+/* ============================================================
+   OCEAN THEME
+   Dark turquoise sea with slow light caustics, drifting waves
+   and rising bubbles. Replaces the night-sky backdrop.
+   ============================================================ */
+
+html { background: #021d24; }
+
+body {
+    background: linear-gradient(180deg, #06505c 0%, #043d47 38%, #03262e 75%, #021a20 100%);
+    background-attachment: fixed;
+}
+
+.night-sky {
+    background: transparent;
+}
+
+/* Light caustics: soft rays of sunlight moving across the water. */
+.night-sky::before,
+.night-sky::after {
+    content: "";
+    position: absolute;
+    inset: -20%;
+    opacity: .55;
+    background:
+        radial-gradient(ellipse 38% 22% at 18% 22%, rgba(120,235,235,.22), transparent 70%),
+        radial-gradient(ellipse 30% 18% at 74% 16%, rgba(140,245,240,.18), transparent 70%),
+        radial-gradient(ellipse 42% 26% at 52% 62%, rgba(60,200,205,.14), transparent 72%);
+    background-size: auto;
+    animation: caustic-drift 22s ease-in-out infinite alternate;
+    mix-blend-mode: screen;
+}
+.night-sky::after {
+    opacity: .4;
+    animation: caustic-drift 31s ease-in-out infinite alternate-reverse;
+}
+@keyframes caustic-drift {
+    from { transform: translate3d(-3%, -2%, 0) scale(1); }
+    to   { transform: translate3d(3%, 2%, 0) scale(1.06); }
+}
+
+/* Gentle waves rolling along the bottom of the screen. */
+.ocean-waves {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 140px;
+    width: 200%;
+    pointer-events: none;
+    background:
+        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 140' preserveAspectRatio='none'><path d='M0 70 C150 30 300 110 450 70 S750 30 900 70 S1150 110 1200 70 L1200 140 L0 140 Z' fill='%230b6e76' fill-opacity='.35'/></svg>") repeat-x bottom / 50% 100%;
+    animation: wave-roll 14s linear infinite;
+}
+.ocean-waves.back {
+    bottom: 18px;
+    opacity: .6;
+    animation-duration: 22s;
+    animation-direction: reverse;
+    filter: hue-rotate(-8deg);
+}
+@keyframes wave-roll {
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(-50%, 0, 0); }
+}
+
+/* Ik Onkar keeps its gold, now glowing over the water. */
+.ik-halo { filter: drop-shadow(0 0 28px rgba(255,231,161,.25)); }
+
+/* Cards read better as dark glass on the teal. */
+main .card,
+.card {
+    background: rgba(3,28,34,.72);
+    border-color: rgba(120,220,220,.22);
+    backdrop-filter: blur(6px);
+}
+
+nav {
+    background: rgba(2,26,32,.82);
+    border-bottom-color: rgba(120,220,220,.22);
+}
+
+footer {
+    background: rgba(2,22,27,.45);
+    color: #8fd3d3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .night-sky::before, .night-sky::after, .ocean-waves { animation: none !important; }
+}
