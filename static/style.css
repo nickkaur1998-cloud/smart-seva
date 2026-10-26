@@ -1212,3 +1212,112 @@ main .card:hover {
 
 .flash-message { max-width: 1100px; margin: 18px auto 0; width: calc(100% - 40px); animation: surface-in .4s ease both; }
 
+
+/* ============================================================
+   INTERFACE POLISH
+   Final layer: consistent alerts, touch-friendly controls,
+   readable tables on phones, and clearer focus/selection states.
+   ============================================================ */
+
+::selection { background: rgba(215,168,62,.45); color: #04070f; }
+
+html { scrollbar-color: rgba(215,168,62,.45) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(215,168,62,.35); border-radius: 10px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* Flash messages: one consistent look for success, error and info. */
+.flash-message,
+.alert {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 16px;
+    border-radius: 13px;
+    border: 1px solid rgba(215,168,62,.35);
+    background: rgba(215,168,62,.09);
+    color: #fff4d0;
+    font-size: 14px;
+    line-height: 1.5;
+}
+.flash-message.success,
+.alert.success {
+    border-color: rgba(77,159,122,.55);
+    background: rgba(77,159,122,.13);
+    color: #d6f5e5;
+}
+.flash-message.error,
+.alert.error {
+    border-color: rgba(220,90,90,.55);
+    background: rgba(220,90,90,.12);
+    color: #ffd7d7;
+}
+.flash-message::before,
+.alert::before {
+    content: "";
+    flex: 0 0 8px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: .85;
+}
+
+/* Form controls: 16px text stops iPhone Safari from zooming on focus. */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+    font-size: 16px;
+    min-height: 44px;
+    padding: 10px 12px;
+    transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+    border-color: rgba(255,231,161,.7);
+    box-shadow: 0 0 0 4px rgba(215,168,62,.15);
+    background: rgba(8,15,32,.95);
+    outline: none;
+}
+input[type="checkbox"], input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    min-height: 0;
+    accent-color: var(--gold);
+    vertical-align: middle;
+    cursor: pointer;
+}
+label { cursor: default; }
+
+/* Buttons: comfortable targets and clear pressed feedback. */
+button, .button {
+    cursor: pointer;
+    transition: transform .15s ease, box-shadow .2s ease, background .2s ease, border-color .2s ease;
+}
+button:active, .button:active { transform: translateY(1px) scale(.99); }
+button:disabled, .button[aria-disabled="true"] {
+    opacity: .5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Tables: scroll sideways inside their card instead of breaking the layout. */
+.table-wrap, main [style*="overflow-x:auto"], main [style*="overflow-x: auto"] {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+main table td, main table th { vertical-align: middle; }
+
+/* Phones: tighter spacing and larger tap targets for navigation. */
+@media (max-width: 700px) {
+    nav a, nav summary, .nav-actions button { min-height: 40px; display: inline-flex; align-items: center; }
+    .flash-message { width: calc(100% - 28px); }
+    main .card { border-radius: 16px; }
+    main h1 { font-size: 1.85rem; }
+    .seva-bot-launcher { min-height: 48px; }
+}
+
+/* Keyboard users: a visible, consistent focus ring everywhere. */
+:focus-visible { outline: 3px solid #ffe7a1; outline-offset: 3px; border-radius: 6px; }
