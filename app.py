@@ -626,6 +626,21 @@ def events_admin_required(function):
     return role_required("admin", "events_admin")(function)
 
 
+def student_required(function):
+    """Student-only pages. Staff are sent to their management page instead."""
+
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        user = current_user()
+        if not user or user["role"] != "student":
+            if request.method == "GET":
+                return management_home()
+            abort(403)
+        return function(*args, **kwargs)
+
+    return wrapper
+
+
 def management_home():
     user = current_user()
     if not user:
@@ -756,29 +771,25 @@ def qr_code():
 
 # Navigation is described as data so every role shares one renderer.
 # Each entry is either (label, href) or (label, [(label, href), ...]) for a dropdown.
-COMMUNITY_MENU = ("Community", [("My Calendar", "/my-calendar"), ("Community Impact", "/impact")])
+IMPACT_LINK = ("Community Impact", "/impact")
 ROLE_NAV = {
     "admin": [
         ("Dashboard", "/admin"),
         ("Manage", [("Manage Seva", "/admin/seva"), ("Manage Paath", "/admin/paath"),
                     ("Manage Pantry", "/admin/pantry"), ("Manage Events", "/admin/events")]),
-        ("Community", [("Activity Log", "/admin/activity-log"), ("My Calendar", "/my-calendar"),
-                       ("Community Impact", "/impact")]),
+        ("Community", [("Activity Log", "/admin/activity-log"), IMPACT_LINK]),
     ],
-    "seva_admin": [("Manage Seva", "/admin/seva"),
-                   ("Explore", [("Seva", "/seva"), ("Events", "/events")]), COMMUNITY_MENU],
-    "paath_admin": [("Manage Paath", "/admin/paath"),
-                    ("Explore", [("Paath", "/paath"), ("Events", "/events")]), COMMUNITY_MENU],
-    "pantry_admin": [("Manage Pantry", "/admin/pantry"),
-                     ("Explore", [("Pantry", "/pantry"), ("Events", "/events")]), COMMUNITY_MENU],
-    "events_admin": [("Manage Events", "/admin/events"), COMMUNITY_MENU],
+    "seva_admin": [("Manage Seva", "/admin/seva"), IMPACT_LINK],
+    "paath_admin": [("Manage Paath", "/admin/paath"), IMPACT_LINK],
+    "pantry_admin": [("Manage Pantry", "/admin/pantry"), IMPACT_LINK],
+    "events_admin": [("Manage Events", "/admin/events"), IMPACT_LINK],
     "student": [
         ("Dashboard", "/dashboard"),
         ("Explore", [("Seva Opportunities", "/seva"), ("Paath Sponsorship", "/paath"),
                      ("Food Pantry", "/pantry"), ("Special Events", "/events")]),
         ("My Seva", [("My Calendar", "/my-calendar"), ("My Profile", "/profile"),
                      ("Notifications", "/notifications")]),
-        ("Community Impact", "/impact"),
+        IMPACT_LINK,
     ],
 }
 
@@ -1758,6 +1769,7 @@ def logout():
 
 @app.route("/seva")
 @login_required
+@student_required
 def seva():
 
     user = current_user()
@@ -2045,6 +2057,20 @@ def seva_api():
 
 # A Paath request holds a slot when it is pending/approved and either needs no
 # payment, is paid, or is unpaid but still inside the Stripe checkout window.
+PAATH_SIGNUP_CUTOFF_HOURS = 12
+
+
+def paath_signups_open(slot):
+    """Sponsorship signups close 12 hours before the paath starts (app local time)."""
+    try:
+        start = datetime.fromisoformat(
+            f"{str(slot['date'])[:10]} {str(slot['start_time'])[:5]}"
+        ).replace(tzinfo=APP_TIMEZONE)
+    except (KeyError, TypeError, ValueError):
+        return False  # if the schedule can't be read, do not take money
+    return datetime.now(APP_TIMEZONE) < start - timedelta(hours=PAATH_SIGNUP_CUTOFF_HOURS)
+
+
 PAATH_ACTIVE_SQL = f"""(
     paath_signups.status IN ('pending', 'approved')
     AND (
@@ -2060,6 +2086,7 @@ PAATH_ACTIVE_SQL = f"""(
 
 @app.route("/paath")
 @login_required
+@student_required
 def paath():
 
     user = current_user()
@@ -2124,8 +2151,12 @@ def paath():
             own_status = None
             own_payment = None
 
+        signups_open = paath_signups_open(slot)
+
         if own_status == "approved":
             action = '<span class="success">✓ Sponsorship approved</span>'
+        elif own_status == "pending" and own_payment == "unpaid" and not signups_open:
+            action = '<span class="warning">Payment not completed · signups are closed</span>'
         elif own_status == "pending" and own_payment == "unpaid":
             action = f'''
                 <span class="warning">Payment not completed</span>
@@ -2136,6 +2167,8 @@ def paath():
             '''
         elif own_status == "pending":
             action = '<span class="warning">Paid · pending approval</span>' if own_payment == "paid" else '<span class="warning">Request pending approval</span>'
+        elif not signups_open:
+            action = f'<span class="muted">Signups closed {PAATH_SIGNUP_CUTOFF_HOURS} hours before this paath</span>'
         elif own_status == "rejected":
             action = f'''
                 <form method="POST" action="/paath/signup/{slot["id"]}">
@@ -2162,6 +2195,7 @@ def paath():
             <p><strong>Sponsorship: ${price_net:,.2f}</strong></p>
             {f'<p class="small muted">+ ${price_fee:,.2f} card processing fee = <strong>${price_total:,.2f}</strong> total</p>' if price_fee else ""}
             <p class="small">{available} of {capacity} slot(s) available</p>
+            {'<p class="small muted">Sponsorships close ' + str(PAATH_SIGNUP_CUTOFF_HOURS) + ' hours before the start time.</p>' if signups_open else ''}
             {action}
         </div>
         """
@@ -2232,6 +2266,7 @@ def start_paath_checkout(signup_id, user, slot):
 
 @app.route("/paath/signup/<int:paath_id>", methods=["POST"])
 @login_required
+@student_required
 def paath_signup(paath_id):
 
     validate_csrf()
@@ -2257,6 +2292,11 @@ def paath_signup(paath_id):
 
         if not slot:
             abort(404)
+
+        if not paath_signups_open(slot):
+            db.rollback()
+            flash(f"Signups for this paath closed {PAATH_SIGNUP_CUTOFF_HOURS} hours before it starts.", "error")
+            return redirect(url_for("paath"))
 
         _net, _fee, charge_total = paath_charge_breakdown(slot["price"])
         cents = int(charge_total * 100)
@@ -2749,6 +2789,7 @@ def delete_paath(paath_id):
 
 @app.route("/signup/<int:seva_id>", methods=["POST"])
 @login_required
+@student_required
 def signup(seva_id):
 
     validate_csrf()
@@ -2845,6 +2886,7 @@ def signup(seva_id):
 
 @app.route("/cancel-signup/<int:signup_id>", methods=["POST"])
 @login_required
+@student_required
 def cancel_signup(signup_id):
     validate_csrf()
     user = current_user()
@@ -2894,6 +2936,7 @@ def cancel_signup(signup_id):
 
 @app.route("/legacy-pantry", methods=["GET", "POST"])
 @login_required
+@student_required
 def pantry():
 
     if request.path == "/legacy-pantry":
@@ -3036,6 +3079,7 @@ def pantry():
 
 @app.route("/pantry/donate/<int:item_id>", methods=["GET", "POST"])
 @login_required
+@student_required
 def donate_pantry_item(item_id):
 
     user = current_user()
@@ -3116,6 +3160,7 @@ def donate_pantry_item(item_id):
 
 @app.route("/pantry")
 @login_required
+@student_required
 def pantry_needs():
 
     user = current_user()
@@ -3219,6 +3264,7 @@ def pantry_needs():
 
 @app.route("/pantry/signup/<int:need_id>", methods=["POST"])
 @login_required
+@student_required
 def pantry_signup(need_id):
 
     validate_csrf()
@@ -3481,6 +3527,7 @@ def update_pantry_fulfillment(signup_id, status):
 
 @app.route("/my-calendar")
 @login_required
+@student_required
 def my_calendar():
     """Show only the signed-in user's non-rejected Seva signups."""
     user = current_user()
@@ -3700,6 +3747,7 @@ def community_impact():
 
 @app.route("/dashboard")
 @login_required
+@student_required
 def dashboard():
 
     user = current_user()
@@ -4490,6 +4538,7 @@ def seva_bot():
 
 @app.route("/checkin/<int:signup_id>", methods=["POST"])
 @login_required
+@student_required
 def checkin(signup_id):
 
     validate_csrf()
@@ -4578,6 +4627,7 @@ def checkin(signup_id):
 
 @app.route("/checkout/<int:signup_id>", methods=["POST"])
 @login_required
+@student_required
 def checkout(signup_id):
 
     validate_csrf()
@@ -5265,6 +5315,7 @@ def verify_certificate(verification_code):
 
 @app.route("/events")
 @login_required
+@student_required
 def events():
     db = get_db()
     rows = db.execute(
@@ -6690,6 +6741,7 @@ def notifications():
 
 @app.route("/profile")
 @login_required
+@student_required
 def profile():
     user = current_user()
     db = get_db()
