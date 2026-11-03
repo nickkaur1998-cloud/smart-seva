@@ -2306,19 +2306,41 @@ def paath_signup(paath_id):
             if booked >= slot["capacity"]:
                 abort(400, "This paath slot is already full.")
 
+            # Any earlier request from this student for this slot is inactive here
+            # (declined, refunded or expired), so reuse that row. Reusing it also
+            # avoids tripping a one-request-per-student-per-slot constraint.
+            previous = db.execute(
+                "SELECT id FROM paath_signups WHERE paath_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1 FOR UPDATE",
+                (paath_id, user["id"])
+            ).fetchone()
+            amount = charge_total if paying else slot["price"]
+            payment_state = "unpaid" if paying else None
             try:
-                signup_id = db.execute(
-                    """
-                    INSERT INTO paath_signups
-                    (paath_id, user_id, amount, status, payment_status, created_at)
-                    VALUES (?, ?, ?, 'pending', ?, ?)
-                    RETURNING id
-                    """,
-                    (paath_id, user["id"], charge_total if paying else slot["price"], "unpaid" if paying else None, utc_now())
-                ).fetchone()["id"]
+                if previous:
+                    signup_id = db.execute(
+                        """
+                        UPDATE paath_signups
+                        SET status = 'pending', amount = ?, payment_status = ?, created_at = ?,
+                            stripe_session_id = NULL, stripe_payment_intent = NULL,
+                            paid_at = NULL, refunded_at = NULL
+                        WHERE id = ?
+                        RETURNING id
+                        """,
+                        (amount, payment_state, utc_now(), previous["id"])
+                    ).fetchone()["id"]
+                else:
+                    signup_id = db.execute(
+                        """
+                        INSERT INTO paath_signups
+                        (paath_id, user_id, amount, status, payment_status, created_at)
+                        VALUES (?, ?, ?, 'pending', ?, ?)
+                        RETURNING id
+                        """,
+                        (paath_id, user["id"], amount, payment_state, utc_now())
+                    ).fetchone()["id"]
             except IntegrityError:
                 db.rollback()
-                flash("You have already requested this Paath.", "error")
+                flash("You already have an active request for this Paath.", "error")
                 return redirect(url_for("paath"))
 
         db.commit()
