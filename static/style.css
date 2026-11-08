@@ -1365,3 +1365,58 @@ body {
 @media (prefers-reduced-motion: reduce) {
     .night-sky::before, .night-sky::after { animation: none !important; }
 }
+
+/* ============================================================
+   LAYOUT POLISH
+   Footer stays at the bottom on short pages, auth pages are
+   centred with room to breathe, and the top bar stays tidy.
+   ============================================================ */
+
+body {
+    display: flex;
+    flex-direction: column;
+}
+body > main {
+    flex: 1 0 auto;
+}
+body > footer {
+    margin-top: auto;
+}
+
+/* Login and registration: centred card, comfortable spacing. */
+main > .container:has(> .card[style*="max-width"]) {
+    padding-top: clamp(40px, 8vh, 96px);
+    padding-bottom: clamp(40px, 8vh, 96px);
+}
+main > .container > .card[style*="max-width"] {
+    width: 100%;
+    padding: clamp(22px, 4vw, 36px);
+}
+
+/* Top bar: utility buttons sit on their own tidy row on phones. */
+@media (max-width: 700px) {
+    nav {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 12px 16px;
+    }
+    nav > .logo {
+        justify-content: center;
+    }
+    .nav-actions {
+        justify-content: center;
+        gap: 8px;
+    }
+    .nav-actions > a,
+    .nav-actions > details,
+    .nav-actions > form {
+        flex: 0 0 auto;
+    }
+    .nav-actions button,
+    .nav-actions .button {
+        font-size: 12px;
+        padding: 8px 10px;
+        min-height: 38px;
+    }
+}

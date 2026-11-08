@@ -110,6 +110,10 @@ def paath_charge_breakdown(price):
 # Keep this value ONLY in the server's .env / deployment environment.
 SUPABASE_DB_URL = os.environ.get("SUPABASE_DB_URL", "").strip()
 
+# Needed only to delete a student's Supabase login. Keep it server-side; it
+# bypasses row-level security and must never reach a browser.
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+
 for suffix in ("/rest/v1", "/auth/v1"):
     if SUPABASE_URL.endswith(suffix):
         SUPABASE_URL = SUPABASE_URL[:-len(suffix)]
@@ -2434,6 +2438,20 @@ def refund_paath_payment(payment_intent, signup_id):
     )
 
 
+def paath_payment_matches(signup_row, session_obj):
+    """True only if Stripe's paid amount, currency and payer match our request."""
+    try:
+        expected_cents = int((Decimal(str(signup_row["amount"])) * 100).quantize(Decimal("1")))
+    except (TypeError, ValueError, ArithmeticError):
+        return False
+    metadata = session_obj.get("metadata") or {}
+    return (
+        session_obj.get("amount_total") == expected_cents
+        and str(session_obj.get("currency", "")).lower() == STRIPE_CURRENCY
+        and str(metadata.get("user_id", "")) == str(signup_row["user_id"])
+    )
+
+
 @app.route("/stripe/webhook", methods=["POST"])
 def stripe_webhook():
     """Stripe calls this when a payment completes or a checkout expires."""
@@ -2462,6 +2480,26 @@ def stripe_webhook():
         if event_type in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
             if obj.get("payment_status") != "paid":
                 return "", 200  # delayed payment method; wait for async_payment_succeeded
+            current = db.execute(
+                "SELECT user_id, amount, status FROM paath_signups WHERE id = ?", (signup_id,)
+            ).fetchone()
+            if current and not paath_payment_matches(current, obj):
+                # Amount, currency or payer doesn't match the request. Don't mark it
+                # paid: refund the money so the student can request again.
+                app.logger.error("Paath payment mismatch for signup %s; refunding", signup_id)
+                if obj.get("payment_intent"):
+                    refund_paath_payment(obj["payment_intent"], signup_id)
+                db.execute(
+                    """
+                    UPDATE paath_signups
+                    SET status = 'rejected', payment_status = 'refunded', refunded_at = NOW(),
+                        stripe_payment_intent = ?
+                    WHERE id = ? AND payment_status IN ('unpaid', 'expired')
+                    """,
+                    (obj.get("payment_intent"), signup_id)
+                )
+                db.commit()
+                return "", 200
             row = db.execute(
                 """
                 UPDATE paath_signups
@@ -6739,6 +6777,100 @@ def notifications():
     return layout(f"<div class='container'><h1>🔔 Notifications</h1>{cards or '<div class="card"><p class="muted">No notifications yet.</p></div>'}</div>", "Notifications")
 
 
+ACCOUNT_DELETE_TABLES = ("notifications", "seva_waitlist", "paath_signups", "pantry_need_signups", "signups")
+
+
+def delete_supabase_auth_user(auth_user_id):
+    """Remove the student's Supabase login so they can't sign back in."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
+        raise RuntimeError("Supabase admin access is not configured.")
+    req = Request(
+        f"{SUPABASE_URL}/auth/v1/admin/users/{auth_user_id}",
+        method="DELETE",
+        headers={
+            "apikey": SUPABASE_SERVICE_ROLE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        },
+    )
+    try:
+        with urlopen(req, timeout=15) as response:
+            response.read()
+    except HTTPError as error:
+        if error.code != 404:  # already removed counts as deleted
+            raise RuntimeError("Supabase rejected the login deletion.") from error
+    except URLError as error:
+        raise RuntimeError("Could not reach Supabase.") from error
+
+
+@app.route("/account/delete", methods=["POST"])
+@login_required
+@student_required
+def delete_account():
+    validate_csrf()
+    user = current_user()
+    user_id = str(user["id"])
+
+    if rate_limited("account-delete", user_id, 5, 3600):
+        flash("Too many attempts. Please try again later.", "error")
+        return redirect(url_for("profile"))
+    if request.form.get("confirm", "").strip() != "DELETE":
+        flash("Type DELETE to confirm.", "error")
+        return redirect(url_for("profile"))
+    if not SUPABASE_SERVICE_ROLE_KEY:
+        app.logger.error("Account deletion requested but SUPABASE_SERVICE_ROLE_KEY is not set")
+        flash("Account deletion is temporarily unavailable. Please contact an administrator.", "error")
+        return redirect(url_for("profile"))
+
+    # Re-check the password so a left-open session can't delete the account.
+    try:
+        supabase_auth_request(
+            "token?grant_type=password",
+            {"email": user["email"], "password": request.form.get("password", "")[:128]},
+        )
+    except (ValueError, RuntimeError):
+        flash("That password is incorrect.", "error")
+        return redirect(url_for("profile"))
+
+    db = get_db()
+    try:
+        open_payments = db.execute(
+            "SELECT COUNT(*) AS n FROM paath_signups WHERE user_id = ? AND payment_status = 'paid' AND status = 'pending'",
+            (user["id"],)
+        ).fetchone()["n"]
+        if open_payments:
+            db.close()
+            flash("You have a paid sponsorship waiting for review. Please wait for it to be decided before deleting your account.", "error")
+            return redirect(url_for("profile"))
+
+        # Personal data first. If anything here fails, nothing is removed.
+        log_activity(db, None, "deleted student account", "user", None, {"role": "student"})
+        for table in ACCOUNT_DELETE_TABLES:
+            db.execute(f"DELETE FROM {table} WHERE user_id = ?", (user["id"],))
+        db.execute("DELETE FROM public.users WHERE id = ?", (user["id"],))
+        db.commit()
+    except Exception as error:
+        db.rollback()
+        app.logger.error("Account data deletion failed: %s", type(error).__name__)
+        flash("We couldn't delete your account. Please contact an administrator.", "error")
+        return redirect(url_for("profile"))
+    finally:
+        db.close()
+
+    try:
+        delete_supabase_auth_user(user_id)
+    except RuntimeError as error:
+        # Data is gone but the login survived. Signing in would recreate an empty profile,
+        # so ask for admin help to finish the deletion.
+        app.logger.error("Supabase login deletion failed: %s", error)
+        session.clear()
+        flash("Your data was removed, but your login couldn't be deleted. Please contact an administrator to finish.", "error")
+        return redirect(url_for("home"))
+
+    session.clear()
+    flash("Your account has been deleted.", "success")
+    return redirect(url_for("home"))
+
+
 @app.route("/profile")
 @login_required
 @student_required
@@ -6749,7 +6881,18 @@ def profile():
     db.close()
     badges = milestone_badges(float(stats["hours"] or 0), int(stats["completed"] or 0))
     badges_html = " ".join(f"<span class='button' style='display:inline-block;margin:4px'>{h(b)}</span>" for b in badges) or "<p class='muted'>Your first milestone will appear after your first approved Seva.</p>"
-    return layout(f"""<div class='container'><h1>👤 My Profile</h1><div class='grid'><div class='card'><h2>{h(user['name'])}</h2><p>{h(user['email'])}</p></div><div class='card'><h2>Verified Hours</h2><div class='stat'>{round(float(stats['hours'] or 0),2)}</div></div><div class='card'><h2>Completed Sevas</h2><div class='stat'>{int(stats['completed'] or 0)}</div></div></div><div class='card'><h2>🏅 Milestones</h2>{badges_html}</div></div>""", "Profile")
+    token = h(csrf_token())
+    delete_card = f"""<div class='card'><h2>Delete my account</h2>
+      <p class='muted'>This permanently removes your login, profile, sign-ups, notifications and Paath requests. It can't be undone.</p>
+      <form method='POST' action='/account/delete' onsubmit="return confirm('Permanently delete your account? This cannot be undone.');">
+        <input type='hidden' name='csrf_token' value='{token}'>
+        <label for='delete-password'>Password</label>
+        <input id='delete-password' type='password' name='password' autocomplete='current-password' required>
+        <label for='delete-confirm'>Type DELETE to confirm</label>
+        <input id='delete-confirm' name='confirm' autocomplete='off' required>
+        <button class='danger'>Delete my account</button>
+      </form></div>"""
+    return layout(f"""<div class='container'><h1>👤 My Profile</h1><div class='grid'><div class='card'><h2>{h(user['name'])}</h2><p>{h(user['email'])}</p></div><div class='card'><h2>Verified Hours</h2><div class='stat'>{round(float(stats['hours'] or 0),2)}</div></div><div class='card'><h2>Completed Sevas</h2><div class='stat'>{int(stats['completed'] or 0)}</div></div></div><div class='card'><h2>🏅 Milestones</h2>{badges_html}</div>{delete_card}</div>""", "Profile")
 
 
 # ============================================================
